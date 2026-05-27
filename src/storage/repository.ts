@@ -1,10 +1,21 @@
-import type { ChatId, FlapLaunchProposal, GroupWallet, SafeSubmission, TradeProposal, WalletLink } from "../domain/types.js";
+import type {
+  ChatId,
+  FlapLaunchProposal,
+  GroupWallet,
+  SafeCreationSession,
+  SafeSubmission,
+  TradeProposal,
+  WalletLink
+} from "../domain/types.js";
 
 export interface Repository {
   getGroupWallet(chatId: ChatId): Promise<GroupWallet | null>;
   saveGroupWallet(wallet: GroupWallet): Promise<void>;
   getWalletLink(telegramUserId: string, address: string): Promise<WalletLink | null>;
+  getLinkedWalletsByTelegramUserId(telegramUserId: string): Promise<WalletLink[]>;
   saveWalletLink(link: WalletLink): Promise<void>;
+  getSafeCreationSession(id: string): Promise<SafeCreationSession | null>;
+  saveSafeCreationSession(session: SafeCreationSession): Promise<void>;
   getTradeProposal(id: string): Promise<TradeProposal | null>;
   saveTradeProposal(proposal: TradeProposal): Promise<void>;
   getFlapLaunch(id: string): Promise<FlapLaunchProposal | null>;

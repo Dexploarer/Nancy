@@ -39,8 +39,8 @@ SAFE_EXECUTOR_PRIVATE_KEY=<gas-only-deployer-and-executor-key>
 6. Start with `bun start`.
 7. Confirm `GET /health` returns `{ "ok": true }`.
 8. Add the bot to a Telegram group and keep privacy mode compatible with slash commands.
-9. Use `/safe_create` and verify the bot stores the emitted Safe address as the group wallet.
-10. Link every Safe owner with `/link_start` and `/link_submit`.
+9. Link every Safe owner with `/link_start` and `/link_submit`.
+10. Use `/safe_group <threshold>`, have owners tap `Join as owner`, then deploy from the inline button.
 11. Create a small test proposal, prepare it, sign from `/sign/<safeSubmissionId>`, and verify it appears in Safe Wallet before funding the Safe materially.
 
 ## Mainnet release gates
@@ -53,4 +53,4 @@ SAFE_EXECUTOR_PRIVATE_KEY=<gas-only-deployer-and-executor-key>
 - Review GoPlus/DexScreener risk output for at least five known tokens.
 - Confirm Telegram group admin checks block a non-admin.
 - Confirm a non-linked Telegram user cannot submit a Safe owner signature.
-- Confirm `/safe_create` receipt contains the expected `ProxyCreation` event and the stored wallet owner list matches the command.
+- Confirm `/safe_group` only accepts linked wallets and the deploy receipt contains the expected `ProxyCreation` event.

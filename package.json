@@ -10,6 +10,7 @@
     "migrate": "bun src/db/migrate.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test tests/*.test.ts",
+    "telegram:setup": "bun src/qa/configureTelegramBot.ts",
     "acceptance:static": "bun src/qa/staticAcceptance.ts",
     "acceptance:live": "bun src/qa/liveAcceptance.ts",
     "verify": "bun run typecheck && bun run test && bun run acceptance:static"

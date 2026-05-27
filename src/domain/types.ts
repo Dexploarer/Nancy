@@ -41,6 +41,26 @@ export type WalletLink = {
   linkedAt?: Date;
 };
 
+export type SafeCreationSessionStatus = "collecting" | "deployed";
+
+export type SafeCreationOwner = {
+  telegramUserId: string;
+  address: Address;
+  joinedAt: Date;
+};
+
+export type SafeCreationSession = {
+  id: string;
+  chatId: ChatId;
+  creatorTelegramId: string;
+  threshold: number;
+  owners: SafeCreationOwner[];
+  status: SafeCreationSessionStatus;
+  createdAt: Date;
+  deployedSafeAddress?: Address;
+  deploymentTxHash?: Hex;
+};
+
 export type FlapTokenStatus = "invalid" | "staged" | "tradable" | "dex" | "unknown";
 
 export type TradeRoute = "flap-portal" | "pancakeswap-v2";

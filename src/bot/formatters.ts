@@ -1,4 +1,11 @@
-import type { ChainTransaction, FlapLaunchProposal, GroupWallet, SafeSubmission, TradeProposal } from "../domain/types.js";
+import type {
+  ChainTransaction,
+  FlapLaunchProposal,
+  GroupWallet,
+  SafeCreationSession,
+  SafeSubmission,
+  TradeProposal
+} from "../domain/types.js";
 import { formatBnb } from "../utils/evm.js";
 import type { SafeDeployment } from "../services/safeDeploymentService.js";
 import type { SafeTransactionServiceStatus } from "../chain/safeService.js";
@@ -49,6 +56,21 @@ export function formatSafeDeployment(deployment: SafeDeployment): string {
     `Owners: ${deployment.owners.join(", ")}`,
     `Deployment tx: ${deployment.transactionHash}`
   ].join("\n");
+}
+
+export function formatSafeCreationSession(session: SafeCreationSession): string {
+  return [
+    `Group Safe setup ${session.id}`,
+    `Status: ${session.status}`,
+    `Threshold: ${session.threshold}/${session.owners.length}`,
+    session.owners.length === 0
+      ? "Owners: none joined yet"
+      : `Owners:\n${session.owners.map((owner, index) => `${index + 1}. ${owner.address}`).join("\n")}`,
+    session.deployedSafeAddress === undefined ? "" : `Safe: ${session.deployedSafeAddress}`,
+    session.deploymentTxHash === undefined ? "" : `Deployment tx: ${session.deploymentTxHash}`
+  ]
+    .filter((line) => line.length > 0)
+    .join("\n");
 }
 
 export function formatSafeSubmission(submission: SafeSubmission, publicBaseUrl?: string): string {

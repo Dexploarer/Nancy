@@ -1,9 +1,18 @@
-import type { ChatId, FlapLaunchProposal, GroupWallet, SafeSubmission, TradeProposal, WalletLink } from "../domain/types.js";
+import type {
+  ChatId,
+  FlapLaunchProposal,
+  GroupWallet,
+  SafeCreationSession,
+  SafeSubmission,
+  TradeProposal,
+  WalletLink
+} from "../domain/types.js";
 import type { Repository } from "./repository.js";
 
 export class MemoryRepository implements Repository {
   private readonly groupWallets = new Map<ChatId, GroupWallet>();
   private readonly walletLinks = new Map<string, WalletLink>();
+  private readonly safeCreationSessions = new Map<string, SafeCreationSession>();
   private readonly tradeProposals = new Map<string, TradeProposal>();
   private readonly flapLaunches = new Map<string, FlapLaunchProposal>();
   private readonly safeSubmissions = new Map<string, SafeSubmission>();
@@ -22,6 +31,18 @@ export class MemoryRepository implements Repository {
 
   async saveWalletLink(link: WalletLink): Promise<void> {
     this.walletLinks.set(walletLinkKey(link.telegramUserId, link.address), link);
+  }
+
+  async getLinkedWalletsByTelegramUserId(telegramUserId: string): Promise<WalletLink[]> {
+    return [...this.walletLinks.values()].filter((link) => link.telegramUserId === telegramUserId && link.status === "linked");
+  }
+
+  async getSafeCreationSession(id: string): Promise<SafeCreationSession | null> {
+    return this.safeCreationSessions.get(id) ?? null;
+  }
+
+  async saveSafeCreationSession(session: SafeCreationSession): Promise<void> {
+    this.safeCreationSessions.set(session.id, session);
   }
 
   async getTradeProposal(id: string): Promise<TradeProposal | null> {

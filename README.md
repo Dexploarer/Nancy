@@ -7,7 +7,7 @@ Telegram MVP for BSC group trading wallets and Flap token launches.
 - Link one Safe-style group wallet per Telegram group.
 - Link Telegram users to Safe owner wallets with signed nonces.
 - Restrict group wallet setup, Flap metadata, Flap launches, and execution to Telegram group admins.
-- Create a BSC Safe from Telegram when `SAFE_EXECUTOR_PRIVATE_KEY` is configured, then bind it to the group automatically.
+- Collect linked wallets from Telegram group members with inline buttons, then deploy a BSC Safe when `SAFE_EXECUTOR_PRIVATE_KEY` is configured.
 - Create group trade proposals for Flap bonding-curve tokens.
 - Route migrated Flap tokens and regular BSC tokens through PancakeSwap V2.
 - Run token risk checks before buy proposals.
@@ -38,6 +38,8 @@ See [docs/production-checklist.md](docs/production-checklist.md) for deployment 
 /start
 /link_start <ownerAddress>
 /link_submit <ownerAddress> <signature>
+/safe_group <threshold>
+/safe_group_join <setupId> <ownerAddress>
 /safe_create <threshold> <owner1> [owner2 ...]
 /wallet_set <safeAddress> <threshold> <owner1> [owner2 ...]
 /wallet
@@ -54,9 +56,9 @@ See [docs/production-checklist.md](docs/production-checklist.md) for deployment 
 Example:
 
 ```text
-/safe_create 2 0x2222222222222222222222222222222222222222 0x3333333333333333333333333333333333333333
 /link_start 0x2222222222222222222222222222222222222222
 /link_submit 0x2222222222222222222222222222222222222222 0x...
+/safe_group 2
 /buy 0x4444444444444444444444444444444444444444 0.25 150
 /flap_metadata Family Coin|FAM|Group token launched through Flap|ipfs://bafy-image...
 /flap_launch Family Coin|FAM|ipfs://bafy...|200|200|30|0x2222222222222222222222222222222222222222:5000,0x3333333333333333333333333333333333333333:5000|0.1
@@ -70,7 +72,9 @@ Pinata is only needed for `/flap_metadata`, which uploads token metadata JSON an
 
 ## Safe creation flow
 
-`/safe_create <threshold> <owner1> [owner2 ...]` deploys a Safe v1.4.1 proxy through SafeProxyFactory on BSC using the configured `SAFE_EXECUTOR_PRIVATE_KEY`. The executor only pays deployment gas and is not added as a Safe owner. After the deployment receipt emits `ProxyCreation`, the bot stores the new Safe as the group wallet.
+`/safe_group <threshold>` starts a group-member collection flow with inline buttons. Each owner first links a wallet with `/link_start` and `/link_submit`, then taps `Join as owner`. When enough owners have joined, a group admin taps `Deploy Safe`. The bot deploys a Safe v1.4.1 proxy through SafeProxyFactory on BSC using the configured `SAFE_EXECUTOR_PRIVATE_KEY`.
+
+`/safe_create <threshold> <owner1> [owner2 ...]` is the direct address-based deployment path for admins who already know the owner addresses. The executor only pays deployment gas and is not added as a Safe owner. After the deployment receipt emits `ProxyCreation`, the bot stores the new Safe as the group wallet.
 
 If you already have a Safe, use `/wallet_set <safeAddress> <threshold> <owner1> [owner2 ...]`.
 

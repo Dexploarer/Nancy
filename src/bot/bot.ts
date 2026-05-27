@@ -8,6 +8,7 @@ import { createFlapSalt, parseVaultRecipients } from "../chain/flapService.js";
 import {
   formatFlapLaunch,
   formatSafeDeployment,
+  formatSafeCreationSession,
   formatSafeStatus,
   formatSafeSubmission,
   formatTradeProposal,
@@ -20,6 +21,9 @@ import { SafeSubmissionService } from "../services/safeSubmissionService.js";
 import { WalletLinkService } from "../services/walletLinkService.js";
 import { FlapMetadataService } from "../services/flapMetadataService.js";
 import { SafeDeploymentService } from "../services/safeDeploymentService.js";
+import { SafeGroupSetupService } from "../services/safeGroupSetupService.js";
+import { BOT_COMMANDS } from "./telegramCommands.js";
+import { helpText, mainMenuKeyboard, safeGroupKeyboard } from "./keyboards.js";
 import {
   emptyToUndefined,
   parsePositiveInteger,
@@ -39,6 +43,7 @@ type BotDependencies = {
   flapMetadataService: FlapMetadataService;
   safeSubmissionService: SafeSubmissionService;
   safeDeploymentService: SafeDeploymentService;
+  safeGroupSetupService: SafeGroupSetupService;
   config: AppConfig;
 };
 
@@ -48,19 +53,12 @@ export function createBot(dependencies: BotDependencies): Bot {
   bot.command("start", async (ctx) => {
     await ctx.reply(
       [
-        "The Family trading bot MVP",
-        "/link_start <ownerAddress>",
-        "/link_submit <ownerAddress> <signature>",
-        "/safe_create <threshold> <owner1> [owner2 ...]",
-        "/wallet_set <safeAddress> <threshold> <owner1> [owner2 ...]",
-        "/buy <tokenAddress> <bnbAmount> [slippageBps]",
-        "/flap_metadata <name>|<symbol>|<description>|<imageUri>|[website]|[telegram]|[x]",
-        "/flap_launch <name>|<symbol>|<metadataCid>|<buyTaxBps>|<sellTaxBps>|<taxDays>|<recipient:bps,...>|<initialBuyBnb>",
-        "/safe_prepare trade <proposalId>",
-        "/safe_prepare flap <launchId>",
-        "/safe_status <safeSubmissionId>",
-        "/safe_execute <safeSubmissionId>"
-      ].join("\n")
+        "The Family group trading bot",
+        "Use the buttons for common flows or Telegram's command menu for every command.",
+        "",
+        BOT_COMMANDS.map((command) => `/${command.command} - ${command.description}`).join("\n")
+      ].join("\n"),
+      { reply_markup: mainMenuKeyboard() }
     );
   });
 
@@ -114,6 +112,35 @@ export function createBot(dependencies: BotDependencies): Bot {
       const deployment = await dependencies.safeDeploymentService.createSafe({ owners, threshold });
       const wallet = await dependencies.groupWalletService.setWallet(chatId, deployment.safeAddress, threshold, owners);
       await ctx.reply([formatSafeDeployment(deployment), "", formatWallet(wallet)].join("\n"));
+    });
+  });
+
+  bot.command("safe_group", async (ctx) => {
+    await handleUserCommand(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const parts = splitCommand(ctx.message?.text, 2);
+      const threshold = parsePositiveInteger(requiredPart(parts, 1), "threshold");
+      const session = await dependencies.safeGroupSetupService.createSession(chatId, fromId, threshold);
+      await ctx.reply(formatSafeCreationSession(session), {
+        reply_markup: safeGroupKeyboard(session)
+      });
+    });
+  });
+
+  bot.command("safe_group_join", async (ctx) => {
+    await handleUserCommand(ctx, async () => {
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const parts = splitCommand(ctx.message?.text, 3);
+      const session = await dependencies.safeGroupSetupService.joinWithWallet(
+        requiredPart(parts, 1),
+        fromId,
+        parseAddress(requiredPart(parts, 2))
+      );
+      await ctx.reply(formatSafeCreationSession(session), {
+        reply_markup: safeGroupKeyboard(session)
+      });
     });
   });
 
@@ -272,6 +299,51 @@ export function createBot(dependencies: BotDependencies): Bot {
     });
   });
 
+  bot.callbackQuery(/^help:/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const data = ctx.callbackQuery.data;
+      await ctx.answerCallbackQuery();
+      await ctx.reply(helpText(data.slice("help:".length)));
+    });
+  });
+
+  bot.callbackQuery(/^safe_join:/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const sessionId = ctx.callbackQuery.data.slice("safe_join:".length);
+      const session = await dependencies.safeGroupSetupService.joinWithDefaultWallet(sessionId, requireTelegramUserId(ctx.from?.id));
+      await ctx.answerCallbackQuery({ text: "Owner wallet joined" });
+      await ctx.editMessageText(formatSafeCreationSession(session), {
+        reply_markup: safeGroupKeyboard(session)
+      });
+    });
+  });
+
+  bot.callbackQuery(/^safe_refresh:/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const session = await dependencies.safeGroupSetupService.getSession(ctx.callbackQuery.data.slice("safe_refresh:".length));
+      await ctx.answerCallbackQuery({ text: "Refreshed" });
+      await ctx.editMessageText(formatSafeCreationSession(session), {
+        reply_markup: safeGroupKeyboard(session)
+      });
+    });
+  });
+
+  bot.callbackQuery(/^safe_deploy:/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
+      const result = await dependencies.safeGroupSetupService.deploy(ctx.callbackQuery.data.slice("safe_deploy:".length));
+      await ctx.answerCallbackQuery({ text: "Safe deployed" });
+      await ctx.editMessageText(
+        [formatSafeCreationSession(result.session), "", formatSafeDeployment(result.deployment), "", formatWallet(result.wallet)].join("\n")
+      );
+    });
+  });
+
+  bot.on("callback_query:data", async (ctx) => {
+    await ctx.answerCallbackQuery();
+  });
+
   bot.catch((error) => {
     Logger.error("[TelegramBot] Unhandled bot error", { err: error.error instanceof Error ? error.error : undefined });
   });
@@ -289,5 +361,18 @@ async function handleUserCommand(ctx: Context, action: () => Promise<void>): Pro
     }
     Logger.error("[TelegramBot] Command failed", { err: error instanceof Error ? error : undefined });
     await ctx.reply("Command failed");
+  }
+}
+
+async function handleCallback(ctx: Context, action: () => Promise<void>): Promise<void> {
+  try {
+    await action();
+  } catch (error) {
+    if (error instanceof UserInputError || error instanceof AppError) {
+      await ctx.answerCallbackQuery({ text: error.message, show_alert: true });
+      return;
+    }
+    Logger.error("[TelegramBot] Callback failed", { err: error instanceof Error ? error : undefined });
+    await ctx.answerCallbackQuery({ text: "Action failed", show_alert: true });
   }
 }

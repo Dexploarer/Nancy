@@ -1,16 +1,11 @@
 import { Pool } from "pg";
-import type { Address, Hex } from "viem";
 import type {
   ChatId,
   FlapLaunchProposal,
   GroupWallet,
+  SafeCreationSession,
   SafeSubmission,
-  SafeSubmissionSourceType,
-  SafeSubmissionStatus,
   TradeProposal,
-  TradeProposalStatus,
-  TradeRoute,
-  VaultRecipient,
   WalletLink
 } from "../domain/types.js";
 import type { Repository } from "./repository.js";
@@ -20,75 +15,16 @@ import {
   deserializeTransactions,
   serializeRiskReport,
   serializeSafeTransaction,
-  serializeTransactions,
-  type StoredChainTransaction,
-  type StoredSafeTransactionData,
-  type StoredTokenRiskReport
+  serializeTransactions
 } from "./postgresSerialization.js";
-
-type GroupWalletRow = {
-  chat_id: string;
-  safe_address: Address;
-  threshold: number;
-  owners: Address[];
-  created_at: Date;
-};
-
-type TradeProposalRow = {
-  id: string;
-  chat_id: string;
-  proposer_telegram_id: string;
-  token_address: Address;
-  input_amount_wei: string;
-  min_output_amount: string;
-  fee_amount_wei: string;
-  route: TradeRoute;
-  status: TradeProposalStatus;
-  risk_report: StoredTokenRiskReport;
-  transactions: StoredChainTransaction[];
-  created_at: Date;
-};
-
-type WalletLinkRow = {
-  telegram_user_id: string;
-  address: Address;
-  nonce: string;
-  status: "pending" | "linked";
-  created_at: Date;
-  linked_at: Date | null;
-};
-
-type FlapLaunchRow = {
-  id: string;
-  chat_id: string;
-  proposer_telegram_id: string;
-  name: string;
-  symbol: string;
-  metadata_uri: string;
-  buy_tax_bps: number;
-  sell_tax_bps: number;
-  tax_duration_seconds: number;
-  initial_buy_wei: string;
-  recipients: VaultRecipient[];
-  salt: Hex;
-  transactions: StoredChainTransaction[];
-  created_at: Date;
-};
-
-type SafeSubmissionRow = {
-  id: string;
-  chat_id: string;
-  source_type: SafeSubmissionSourceType;
-  source_id: string;
-  safe_address: Address;
-  safe_tx_hash: Hex;
-  safe_transaction: StoredSafeTransactionData;
-  transaction_service_url: string;
-  status: SafeSubmissionStatus;
-  sender_address: Address | null;
-  submitted_at: Date | null;
-  created_at: Date;
-};
+import type {
+  FlapLaunchRow,
+  GroupWalletRow,
+  SafeCreationSessionRow,
+  SafeSubmissionRow,
+  TradeProposalRow,
+  WalletLinkRow
+} from "./postgresRows.js";
 
 export class PostgresRepository implements Repository {
   private readonly pool: Pool;
@@ -152,6 +88,71 @@ export class PostgresRepository implements Repository {
        on conflict (telegram_user_id, address)
        do update set nonce = excluded.nonce, status = excluded.status, linked_at = excluded.linked_at`,
       [link.telegramUserId, link.address, link.nonce, link.status, link.createdAt, link.linkedAt ?? null]
+    );
+  }
+
+  async getLinkedWalletsByTelegramUserId(telegramUserId: string): Promise<WalletLink[]> {
+    const result = await this.pool.query<WalletLinkRow>(
+      `select telegram_user_id, address, nonce, status, created_at, linked_at
+       from wallet_links where telegram_user_id = $1 and status = 'linked'`,
+      [telegramUserId]
+    );
+    return result.rows.map((row) => ({
+      telegramUserId: row.telegram_user_id,
+      address: row.address,
+      nonce: row.nonce,
+      status: row.status,
+      createdAt: row.created_at,
+      ...(row.linked_at === null ? {} : { linkedAt: row.linked_at })
+    }));
+  }
+
+  async getSafeCreationSession(id: string): Promise<SafeCreationSession | null> {
+    const result = await this.pool.query<SafeCreationSessionRow>(
+      `select id, chat_id, creator_telegram_id, threshold, owners, status,
+       deployed_safe_address, deployment_tx_hash, created_at
+       from safe_creation_sessions where id = $1`,
+      [id]
+    );
+    const row = result.rows[0];
+    if (row === undefined) {
+      return null;
+    }
+    return {
+      id: row.id,
+      chatId: row.chat_id,
+      creatorTelegramId: row.creator_telegram_id,
+      threshold: row.threshold,
+      owners: row.owners,
+      status: row.status,
+      createdAt: row.created_at,
+      ...(row.deployed_safe_address === null ? {} : { deployedSafeAddress: row.deployed_safe_address }),
+      ...(row.deployment_tx_hash === null ? {} : { deploymentTxHash: row.deployment_tx_hash })
+    };
+  }
+
+  async saveSafeCreationSession(session: SafeCreationSession): Promise<void> {
+    await this.pool.query(
+      `insert into safe_creation_sessions(
+        id, chat_id, creator_telegram_id, threshold, owners, status,
+        deployed_safe_address, deployment_tx_hash, created_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      on conflict (id) do update set
+        owners = excluded.owners,
+        status = excluded.status,
+        deployed_safe_address = excluded.deployed_safe_address,
+        deployment_tx_hash = excluded.deployment_tx_hash`,
+      [
+        session.id,
+        session.chatId,
+        session.creatorTelegramId,
+        session.threshold,
+        JSON.stringify(session.owners),
+        session.status,
+        session.deployedSafeAddress ?? null,
+        session.deploymentTxHash ?? null,
+        session.createdAt
+      ]
     );
   }
 

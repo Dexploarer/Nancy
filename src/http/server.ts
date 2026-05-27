@@ -7,6 +7,7 @@ import { Logger } from "../logger.js";
 import { parseAddress, parseHex } from "../utils/evm.js";
 import { renderSigningPage } from "./signingPage.js";
 import { verifyTelegramInitData } from "./telegramInitData.js";
+import { configureTelegramBot } from "../bot/telegramCommands.js";
 
 const SignaturePayloadSchema = z.object({
   telegramUserId: z.string().regex(/^\d+$/).optional(),
@@ -18,6 +19,9 @@ const SignaturePayloadSchema = z.object({
 export async function startHttpRuntime(appState: App, config: AppConfig): Promise<void> {
   const webhookPath = config.telegramWebhookSecret === undefined ? undefined : `/telegram/${config.telegramWebhookSecret}`;
   const webhookHandler = webhookPath === undefined ? undefined : webhookCallback(appState.bot, "bun");
+
+  await configureTelegramBot(appState.bot);
+  Logger.info("[HttpRuntime] Telegram commands configured");
 
   Bun.serve({
     port: config.httpPort,
