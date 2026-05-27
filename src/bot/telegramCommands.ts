@@ -1,5 +1,15 @@
 import type { Bot } from "grammy";
 
+export const BOT_NAME = "Nancy, the Golden Girl of Binance";
+
+export const BOT_SHORT_DESCRIPTION = "BSC Safe group trading, pool accounting, and Flap launches for Telegram groups.";
+
+export const BOT_DESCRIPTION = [
+  "Nancy, the Golden Girl of Binance, helps Telegram groups run BSC Safe trading pools.",
+  "Create or link a group Safe, assign owners/traders/members, verify deposits, track shares and PnL, prepare token buys, launch through Flap, and approve Safe transactions.",
+  "Nancy is infrastructure only. No profit, token, or execution guarantees."
+].join("\n");
+
 export const BOT_COMMANDS = [
   { command: "start", description: "Open the group trading menu" },
   { command: "wallet_generate", description: "Create a bot-managed owner wallet" },
@@ -27,6 +37,9 @@ export const BOT_COMMANDS = [
 ] as const;
 
 export async function configureTelegramBot(bot: Bot): Promise<void> {
+  await bot.api.setMyName(BOT_NAME);
+  await bot.api.setMyDescription(BOT_DESCRIPTION);
+  await bot.api.setMyShortDescription(BOT_SHORT_DESCRIPTION);
   await bot.api.setMyCommands([...BOT_COMMANDS]);
   await bot.api.setChatMenuButton({ menu_button: { type: "commands" } });
 }
