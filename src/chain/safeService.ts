@@ -1,6 +1,7 @@
 import {
   concatHex,
   createPublicClient,
+  createWalletClient,
   encodeFunctionData,
   hexToNumber,
   http,
@@ -13,6 +14,7 @@ import {
   type Hex,
   type PublicClient
 } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { bsc, bscTestnet } from "viem/chains";
 import { AppError, UserInputError } from "../domain/errors.js";
 import type { ChainTransaction, SafeTransactionData } from "../domain/types.js";
@@ -38,20 +40,42 @@ type SafeConfigResponse = {
   transactionService?: string;
 };
 
+export type SafeConfirmation = {
+  owner: Address;
+  signature: Hex;
+};
+
+type SafeTransactionServiceResponse = {
+  confirmations?: SafeConfirmation[];
+};
+
 export class SafeService {
   readonly publicClient: PublicClient;
+  private readonly chain;
+  private readonly walletClient?: ReturnType<typeof createWalletClient>;
+  private readonly executorAccount?: ReturnType<typeof privateKeyToAccount>;
 
   constructor(
     private readonly addresses: BscContractAddresses,
     rpcUrl: string,
     private readonly chainId: 56 | 97,
     private readonly explicitTransactionServiceUrl?: string,
-    private readonly apiKey?: string
+    private readonly apiKey?: string,
+    executorPrivateKey?: Hex
   ) {
+    this.chain = chainId === 56 ? bsc : bscTestnet;
     this.publicClient = createPublicClient({
-      chain: chainId === 56 ? bsc : bscTestnet,
+      chain: this.chain,
       transport: http(rpcUrl)
     });
+    if (executorPrivateKey !== undefined) {
+      this.executorAccount = privateKeyToAccount(executorPrivateKey);
+      this.walletClient = createWalletClient({
+        account: this.executorAccount,
+        chain: this.chain,
+        transport: http(rpcUrl)
+      });
+    }
   }
 
   async prepareSafeTransaction(
@@ -114,6 +138,36 @@ export class SafeService {
   async getTransaction(serviceUrl: string, safeTxHash: Hex): Promise<unknown> {
     return this.requestJson(`${trimTrailingSlash(serviceUrl)}/api/v1/multisig-transactions/${safeTxHash}/`, {
       method: "GET"
+    });
+  }
+
+  async executeTransaction(
+    safeAddress: Address,
+    safeTransaction: SafeTransactionData,
+    confirmations: SafeConfirmation[]
+  ): Promise<Hex> {
+    if (this.walletClient === undefined || this.executorAccount === undefined) {
+      throw new UserInputError("SAFE_EXECUTOR_PRIVATE_KEY is required to execute Safe transactions from the bot");
+    }
+    const signatures = buildSignatureBytes(confirmations);
+    return this.walletClient.writeContract({
+      address: safeAddress,
+      abi: safeAbi,
+      functionName: "execTransaction",
+      account: this.executorAccount,
+      chain: this.chain,
+      args: [
+        safeTransaction.to,
+        safeTransaction.value,
+        safeTransaction.data,
+        safeTransaction.operation,
+        safeTransaction.safeTxGas,
+        safeTransaction.baseGas,
+        safeTransaction.gasPrice,
+        safeTransaction.gasToken,
+        safeTransaction.refundReceiver,
+        signatures
+      ]
     });
   }
 
@@ -219,6 +273,26 @@ export class SafeService {
     }
     return payload;
   }
+}
+
+export function extractConfirmations(status: unknown): SafeConfirmation[] {
+  const response = status as SafeTransactionServiceResponse;
+  return response.confirmations ?? [];
+}
+
+export function buildSignatureBytes(confirmations: SafeConfirmation[]): Hex {
+  if (confirmations.length === 0) {
+    throw new UserInputError("Safe transaction has no confirmations");
+  }
+  const uniqueConfirmations = new Map<string, SafeConfirmation>();
+  for (const confirmation of confirmations) {
+    uniqueConfirmations.set(confirmation.owner.toLowerCase(), confirmation);
+  }
+  return concatHex(
+    [...uniqueConfirmations.values()]
+      .sort((left, right) => left.owner.toLowerCase().localeCompare(right.owner.toLowerCase()))
+      .map((confirmation) => confirmation.signature)
+  );
 }
 
 export function encodeMultiSendTransactions(transactions: ChainTransaction[]): Hex {

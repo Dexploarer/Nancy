@@ -152,6 +152,24 @@ export const safeAbi = [
       { name: "nonce", type: "uint256" }
     ],
     outputs: [{ name: "", type: "bytes32" }]
+  },
+  {
+    type: "function",
+    name: "execTransaction",
+    stateMutability: "payable",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "value", type: "uint256" },
+      { name: "data", type: "bytes" },
+      { name: "operation", type: "uint8" },
+      { name: "safeTxGas", type: "uint256" },
+      { name: "baseGas", type: "uint256" },
+      { name: "gasPrice", type: "uint256" },
+      { name: "gasToken", type: "address" },
+      { name: "refundReceiver", type: "address" },
+      { name: "signatures", type: "bytes" }
+    ],
+    outputs: [{ name: "success", type: "bool" }]
   }
 ] as const;
 
@@ -161,6 +179,31 @@ export const multiSendAbi = [
     name: "multiSend",
     stateMutability: "payable",
     inputs: [{ name: "transactions", type: "bytes" }],
+    outputs: []
+  }
+] as const;
+
+export const pancakeV2RouterAbi = [
+  {
+    type: "function",
+    name: "getAmountsOut",
+    stateMutability: "view",
+    inputs: [
+      { name: "amountIn", type: "uint256" },
+      { name: "path", type: "address[]" }
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }]
+  },
+  {
+    type: "function",
+    name: "swapExactETHForTokensSupportingFeeOnTransferTokens",
+    stateMutability: "payable",
+    inputs: [
+      { name: "amountOutMin", type: "uint256" },
+      { name: "path", type: "address[]" },
+      { name: "to", type: "address" },
+      { name: "deadline", type: "uint256" }
+    ],
     outputs: []
   }
 ] as const;

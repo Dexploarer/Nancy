@@ -9,7 +9,7 @@ import type {
 } from "../domain/types.js";
 import type { Repository } from "../storage/repository.js";
 import { createId } from "../utils/ids.js";
-import { SafeService } from "../chain/safeService.js";
+import { extractConfirmations, SafeService } from "../chain/safeService.js";
 
 type PreparedSafeTransaction = {
   safeTransaction: SafeTransactionData;
@@ -80,6 +80,16 @@ export class SafeSubmissionService {
   async getStatus(submissionId: string): Promise<unknown> {
     const submission = await this.getSubmissionOrThrow(submissionId);
     return this.safeService.getTransaction(submission.transactionServiceUrl, submission.safeTxHash);
+  }
+
+  async execute(submissionId: string): Promise<Hex> {
+    const submission = await this.getSubmissionOrThrow(submissionId);
+    const status = await this.safeService.getTransaction(submission.transactionServiceUrl, submission.safeTxHash);
+    return this.safeService.executeTransaction(
+      submission.safeAddress,
+      submission.safeTransaction,
+      extractConfirmations(status)
+    );
   }
 
   async getSubmission(submissionId: string): Promise<SafeSubmission | null> {

@@ -2,6 +2,7 @@ import type { AppConfig } from "./config.js";
 import { getBscContractAddresses } from "./chain/addresses.js";
 import { FlapService } from "./chain/flapService.js";
 import { SafeService } from "./chain/safeService.js";
+import { PancakeSwapService } from "./chain/pancakeSwapService.js";
 import { createBot } from "./bot/bot.js";
 import { GroupWalletService } from "./services/groupWalletService.js";
 import { TradeService } from "./services/tradeService.js";
@@ -16,15 +17,17 @@ export function buildApp(config: AppConfig): ReturnType<typeof createBot> {
   const repository = createRepository(config);
   const addresses = getBscContractAddresses(config.bscChainId);
   const flapService = new FlapService(addresses, config.bscRpcUrl, config.bscChainId);
+  const pancakeSwapService = new PancakeSwapService(addresses, config.bscRpcUrl, config.bscChainId);
   const safeService = new SafeService(
     addresses,
     config.bscRpcUrl,
     config.bscChainId,
     config.safeTransactionServiceUrl,
-    config.safeApiKey
+    config.safeApiKey,
+    config.safeExecutorPrivateKey
   );
   const groupWalletService = new GroupWalletService(repository);
-  const tradeService = new TradeService(repository, flapService);
+  const tradeService = new TradeService(repository, flapService, pancakeSwapService);
   const flapLaunchService = new FlapLaunchService(repository, flapService);
   const safeSubmissionService = new SafeSubmissionService(repository, safeService);
   return createBot({

@@ -34,9 +34,9 @@ export type GroupWallet = {
 
 export type FlapTokenStatus = "invalid" | "staged" | "tradable" | "dex" | "unknown";
 
-export type TradeRoute = "flap-portal" | "dex-required";
+export type TradeRoute = "flap-portal" | "pancakeswap-v2";
 
-export type TradeProposalStatus = "created" | "needs-dex-route";
+export type TradeProposalStatus = "created";
 
 export type TradeProposal = {
   id: string;

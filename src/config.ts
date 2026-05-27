@@ -16,7 +16,9 @@ const EnvSchema = z
     TRADE_FEE_BPS: z.coerce.number().int().min(0).max(100),
     DATABASE_URL: z.string().url().optional(),
     SAFE_TRANSACTION_SERVICE_URL: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
-    SAFE_API_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional())
+    SAFE_API_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional()),
+    SAFE_EXECUTOR_PRIVATE_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional()),
+    DEX_DEADLINE_SECONDS: z.coerce.number().int().min(60).max(604800)
   })
   .superRefine((env, ctx) => {
     if (env.STORAGE_DRIVER === "postgres" && env.DATABASE_URL === undefined) {
@@ -40,6 +42,8 @@ export type AppConfig = {
   databaseUrl?: string;
   safeTransactionServiceUrl?: string;
   safeApiKey?: string;
+  safeExecutorPrivateKey?: `0x${string}`;
+  dexDeadlineSeconds: number;
 };
 
 export function loadConfig(): AppConfig {
@@ -55,6 +59,8 @@ export function loadConfig(): AppConfig {
     tradeFeeBps: env.TRADE_FEE_BPS,
     ...(env.DATABASE_URL === undefined ? {} : { databaseUrl: env.DATABASE_URL }),
     ...(env.SAFE_TRANSACTION_SERVICE_URL === undefined ? {} : { safeTransactionServiceUrl: env.SAFE_TRANSACTION_SERVICE_URL }),
-    ...(env.SAFE_API_KEY === undefined ? {} : { safeApiKey: env.SAFE_API_KEY })
+    ...(env.SAFE_API_KEY === undefined ? {} : { safeApiKey: env.SAFE_API_KEY }),
+    ...(env.SAFE_EXECUTOR_PRIVATE_KEY === undefined ? {} : { safeExecutorPrivateKey: env.SAFE_EXECUTOR_PRIVATE_KEY as `0x${string}` }),
+    dexDeadlineSeconds: env.DEX_DEADLINE_SECONDS
   };
 }

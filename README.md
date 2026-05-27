@@ -6,6 +6,7 @@ Telegram MVP for BSC group trading wallets and Flap token launches.
 
 - Link one Safe-style group wallet per Telegram group.
 - Create group trade proposals for Flap bonding-curve tokens.
+- Route migrated Flap tokens and regular BSC tokens through PancakeSwap V2.
 - Add a minimal platform fee leg to bot-built trade proposals.
 - Launch Flap `TOKEN_TAXED_V3` tokens through `VaultPortal` with the official Split Vault.
 - Route Flap launch commission to the configured platform wallet through Flap's existing `commissionReceiver`.
@@ -35,6 +36,7 @@ npm run dev
 /safe_prepare flap <launchId>
 /safe_submit <safeSubmissionId> <ownerAddress> <signature>
 /safe_status <safeSubmissionId>
+/safe_execute <safeSubmissionId>
 ```
 
 Example:
@@ -45,6 +47,7 @@ Example:
 /flap_launch Family Coin|FAM|ipfs://bafy...|200|200|30|0x2222222222222222222222222222222222222222:5000,0x3333333333333333333333333333333333333333:5000|0.1
 /safe_prepare trade trade_...
 /safe_submit safe_... 0x2222222222222222222222222222222222222222 0x...
+/safe_execute safe_...
 ```
 
 ## Safe owner signing flow
@@ -56,11 +59,12 @@ Example:
 5. Paste the signature with `/safe_submit <safeSubmissionId> <ownerAddress> <signature>`.
 6. The first valid owner signature proposes the transaction to Safe Transaction Service. Later signatures are added as confirmations.
 7. Use `/safe_status <safeSubmissionId>` to inspect confirmations and execution state.
+8. If `SAFE_EXECUTOR_PRIVATE_KEY` is set, run `/safe_execute <safeSubmissionId>` after threshold is met.
 
 ## Important limitations
 
 - Flap tokens in the bonding-curve phase route through Flap `Portal`.
-- Flap tokens already migrated to DEX are detected, but PancakeSwap routing is left for the next slice.
+- Flap tokens already migrated to DEX and regular BSC tokens route through PancakeSwap V2.
 - Safe Transaction Service submission requires a real Safe owner signature. The bot validates that the signature recovers to a configured owner before submitting it.
-- Execution can be done from Safe Wallet after threshold is reached. The MVP does not hold an executor gas key.
+- Execution can be done from Safe Wallet or by `/safe_execute` using an optional executor gas key. That key only pays gas; it is not a Safe owner key.
 - `STORAGE_DRIVER=memory` is for local testing. Use the schema in `db/schema.sql` before production.

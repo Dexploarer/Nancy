@@ -1,6 +1,6 @@
 import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
-import { normalizeOwnerSignature, SafeService } from "../src/chain/safeService.js";
+import { buildSignatureBytes, normalizeOwnerSignature, SafeService } from "../src/chain/safeService.js";
 import type { ChainTransaction } from "../src/domain/types.js";
 
 const MULTISEND = "0x9641d764fc13c8B624c04430C7356C1C7C8102e2";
@@ -66,5 +66,20 @@ describe("SafeService", () => {
 
     expect(normalized).not.toBe(signature);
     expect(["1f", "20"]).toContain(normalized.slice(-2));
+  });
+
+  it("sorts Safe signatures by owner address", () => {
+    const signatures = buildSignatureBytes([
+      {
+        owner: "0x2222222222222222222222222222222222222222",
+        signature: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1f"
+      },
+      {
+        owner: "0x1111111111111111111111111111111111111111",
+        signature: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1f"
+      }
+    ]);
+
+    expect(signatures.startsWith("0xaaaaaaaa")).toBe(true);
   });
 });

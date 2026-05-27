@@ -34,7 +34,8 @@ export function createBot(dependencies: BotDependencies): Bot {
         "/safe_prepare trade <proposalId>",
         "/safe_prepare flap <launchId>",
         "/safe_submit <safeSubmissionId> <ownerAddress> <signature>",
-        "/safe_status <safeSubmissionId>"
+        "/safe_status <safeSubmissionId>",
+        "/safe_execute <safeSubmissionId>"
       ].join("\n")
     );
   });
@@ -80,7 +81,8 @@ export function createBot(dependencies: BotDependencies): Bot {
         inputAmountWei: amountWei,
         slippageBps,
         tradeFeeBps: dependencies.config.tradeFeeBps,
-        feeRecipient: dependencies.config.platformFeeRecipient
+        feeRecipient: dependencies.config.platformFeeRecipient,
+        dexDeadlineSeconds: dependencies.config.dexDeadlineSeconds
       });
       await ctx.reply(formatTradeProposal(proposal));
     });
@@ -167,6 +169,14 @@ export function createBot(dependencies: BotDependencies): Bot {
       const parts = splitCommand(ctx.message?.text, 2);
       const status = await dependencies.safeSubmissionService.getStatus(requiredPart(parts, 1));
       await ctx.reply(formatSafeStatus(status));
+    });
+  });
+
+  bot.command("safe_execute", async (ctx) => {
+    await handleUserCommand(ctx, async () => {
+      const parts = splitCommand(ctx.message?.text, 2);
+      const txHash = await dependencies.safeSubmissionService.execute(requiredPart(parts, 1));
+      await ctx.reply(`Safe execution submitted: ${txHash}`);
     });
   });
 
