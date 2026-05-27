@@ -1,4 +1,4 @@
-import { createPublicClient, http, type Address, type Hex, type PublicClient } from "viem";
+import { createPublicClient, http, type Address, type Hex } from "viem";
 import { bsc, bscTestnet } from "viem/chains";
 import { UserInputError } from "../domain/errors.js";
 
@@ -9,11 +9,26 @@ export type VerifiedNativeDeposit = {
   amountWei: bigint;
 };
 
-export class DepositVerificationService {
-  private readonly publicClient: PublicClient;
+export type NativeDepositTransaction = {
+  from: Address;
+  to: Address | null;
+  value: bigint;
+};
 
-  constructor(rpcUrl: string, chainId: 56 | 97) {
-    this.publicClient = createPublicClient({
+export type NativeDepositReceipt = {
+  status: "success" | "reverted";
+};
+
+export interface NativeDepositClient {
+  getTransaction(input: { hash: Hex }): Promise<NativeDepositTransaction>;
+  getTransactionReceipt(input: { hash: Hex }): Promise<NativeDepositReceipt>;
+}
+
+export class DepositVerificationService {
+  private readonly publicClient: NativeDepositClient;
+
+  constructor(rpcUrl: string, chainId: 56 | 97, client?: NativeDepositClient) {
+    this.publicClient = client ?? createPublicClient({
       chain: chainId === 56 ? bsc : bscTestnet,
       transport: http(rpcUrl)
     });

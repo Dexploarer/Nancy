@@ -79,6 +79,93 @@ describe("PoolService", () => {
     await expect(service.requireTraderAccess("chat", "trader")).resolves.toBeUndefined();
     await expect(service.requireTraderAccess("chat", "member")).rejects.toThrow("Only pool owners and traders");
   });
+
+  it("rejects duplicate deposit hashes and invalid NAV snapshots", async () => {
+    const { service } = await setupPool();
+    const transactionHash = "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+
+    await service.creditDeposit({
+      chatId: "chat",
+      telegramUserId: "owner",
+      amountWei: parseEther("1"),
+      transactionHash
+    });
+
+    await expect(
+      service.creditDeposit({
+        chatId: "chat",
+        telegramUserId: "owner",
+        amountWei: parseEther("1"),
+        transactionHash
+      })
+    ).rejects.toThrow("already credited");
+
+    await expect(
+      service.updateNav({
+        chatId: "chat",
+        operatorTelegramId: "owner",
+        navWei: parseEther("2"),
+        liquidWei: parseEther("1"),
+        positionsWei: parseEther("0.5")
+      })
+    ).rejects.toThrow("must equal liquid plus open-position value");
+  });
+
+  it("keeps open-position withdrawals queued until liquid BNB is available", async () => {
+    const { service } = await setupPool();
+
+    await service.creditDeposit({
+      chatId: "chat",
+      telegramUserId: "owner",
+      amountWei: parseEther("10"),
+      transactionHash: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    });
+    await service.updateNav({
+      chatId: "chat",
+      operatorTelegramId: "owner",
+      navWei: parseEther("10"),
+      liquidWei: parseEther("1"),
+      positionsWei: parseEther("9")
+    });
+    const request = await service.requestWithdrawal({
+      chatId: "chat",
+      telegramUserId: "owner",
+      recipientAddress: ownerAddress,
+      withdrawalBps: 5000
+    });
+
+    await expect(service.getWithdrawalTransactions("chat", request.id, ownerAddress)).rejects.toThrow("Not enough liquid BNB");
+  });
+
+  it("blocks non-owners from role and NAV mutation", async () => {
+    const { service } = await setupPool();
+
+    await expect(
+      service.setRole({
+        chatId: "chat",
+        operatorTelegramId: "member",
+        targetTelegramId: "member",
+        role: "trader"
+      })
+    ).rejects.toThrow("Pool member not found");
+
+    await service.setRole({
+      chatId: "chat",
+      operatorTelegramId: "owner",
+      targetTelegramId: "member",
+      role: "member"
+    });
+
+    await expect(
+      service.updateNav({
+        chatId: "chat",
+        operatorTelegramId: "member",
+        navWei: 0n,
+        liquidWei: 0n,
+        positionsWei: 0n
+      })
+    ).rejects.toThrow("Only pool owners");
+  });
 });
 
 async function setupPool(): Promise<{ service: PoolService }> {

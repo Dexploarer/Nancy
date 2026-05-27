@@ -22,4 +22,15 @@ describe("BOT_COMMANDS", () => {
     expect(BOT_DESCRIPTION.length).toBeLessThanOrEqual(512);
     expect(BOT_DESCRIPTION).toContain("infrastructure only");
   });
+
+  it("keeps command metadata unique and inside Telegram limits", () => {
+    const commands = new Set<string>();
+    for (const command of BOT_COMMANDS) {
+      expect(command.command).toMatch(/^[a-z0-9_]{1,32}$/);
+      expect(command.description.length).toBeGreaterThan(0);
+      expect(command.description.length).toBeLessThanOrEqual(256);
+      expect(commands.has(command.command)).toBe(false);
+      commands.add(command.command);
+    }
+  });
 });

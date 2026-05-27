@@ -34,6 +34,7 @@ bun run dev
 For production, set `PUBLIC_BASE_URL` and `TELEGRAM_WEBHOOK_SECRET`. The process starts an HTTP server with `/health`, `/telegram/<secret>`, `/sign/<safeSubmissionId>`, and `/pool/<chatId>`.
 
 See [docs/production-checklist.md](docs/production-checklist.md) for deployment gates.
+See [docs/qa-test-matrix.md](docs/qa-test-matrix.md) for automated, live-smoke, and manually gated coverage.
 
 ## Telegram commands
 
