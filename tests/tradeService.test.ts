@@ -49,10 +49,27 @@ class FakePancakeSwapService {
   }
 }
 
+class FakeTokenRiskService {
+  async checkBscToken(tokenAddress: Address) {
+    return {
+      tokenAddress,
+      level: "low" as const,
+      blocked: false,
+      reasons: [],
+      checkedAt: new Date("2026-05-27T00:00:00.000Z")
+    };
+  }
+}
+
 describe("TradeService", () => {
   it("creates a Safe transaction batch with platform fee and Flap buy", async () => {
     const repository = new MemoryRepository();
-    const service = new TradeService(repository, new FakeFlapService() as never, new FakePancakeSwapService() as never);
+    const service = new TradeService(
+      repository,
+      new FakeFlapService() as never,
+      new FakePancakeSwapService() as never,
+      new FakeTokenRiskService() as never
+    );
     await repository.saveGroupWallet({
       chatId: "123",
       safeAddress: "0x1111111111111111111111111111111111111111",
@@ -73,6 +90,7 @@ describe("TradeService", () => {
     });
 
     expect(proposal.route).toBe("flap-portal");
+    expect(proposal.riskReport.level).toBe("low");
     expect(proposal.feeAmountWei).toBe(1_000n);
     expect(proposal.minOutputAmount).toBe(9_900n);
     expect(proposal.transactions).toHaveLength(2);
@@ -82,7 +100,12 @@ describe("TradeService", () => {
 
   it("routes migrated Flap tokens through PancakeSwap V2", async () => {
     const repository = new MemoryRepository();
-    const service = new TradeService(repository, new FakeDexFlapService() as never, new FakePancakeSwapService() as never);
+    const service = new TradeService(
+      repository,
+      new FakeDexFlapService() as never,
+      new FakePancakeSwapService() as never,
+      new FakeTokenRiskService() as never
+    );
     await repository.saveGroupWallet({
       chatId: "123",
       safeAddress: "0x1111111111111111111111111111111111111111",

@@ -1,9 +1,10 @@
 import { loadConfig } from "./config.js";
 import { buildApp } from "./app.js";
 import { Logger } from "./logger.js";
+import { startHttpRuntime } from "./http/server.js";
 
 const config = loadConfig();
-const bot = buildApp(config);
+const app = buildApp(config);
 
 Logger.info("[Bootstrap] Starting Telegram bot", {
   appEnv: config.appEnv,
@@ -11,4 +12,4 @@ Logger.info("[Bootstrap] Starting Telegram bot", {
   bscChainId: config.bscChainId
 });
 
-await bot.start();
+await startHttpRuntime(app, config);

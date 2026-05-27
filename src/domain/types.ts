@@ -32,6 +32,15 @@ export type GroupWallet = {
   createdAt: Date;
 };
 
+export type WalletLink = {
+  telegramUserId: string;
+  address: Address;
+  nonce: string;
+  status: "pending" | "linked";
+  createdAt: Date;
+  linkedAt?: Date;
+};
+
 export type FlapTokenStatus = "invalid" | "staged" | "tradable" | "dex" | "unknown";
 
 export type TradeRoute = "flap-portal" | "pancakeswap-v2";
@@ -48,8 +57,23 @@ export type TradeProposal = {
   feeAmountWei: bigint;
   route: TradeRoute;
   status: TradeProposalStatus;
+  riskReport: TokenRiskReport;
   transactions: ChainTransaction[];
   createdAt: Date;
+};
+
+export type RiskLevel = "low" | "medium" | "high" | "unknown";
+
+export type TokenRiskReport = {
+  tokenAddress: Address;
+  level: RiskLevel;
+  blocked: boolean;
+  reasons: string[];
+  liquidityUsd?: number;
+  pairUrl?: string;
+  buyTaxBps?: number;
+  sellTaxBps?: number;
+  checkedAt: Date;
 };
 
 export type VaultRecipient = {

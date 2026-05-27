@@ -3,6 +3,7 @@ import type { Address, Hex } from "viem";
 import { MemoryRepository } from "../src/storage/memoryRepository.js";
 import { SafeSubmissionService } from "../src/services/safeSubmissionService.js";
 import type { SafeSubmission } from "../src/domain/types.js";
+import { WalletLinkService } from "../src/services/walletLinkService.js";
 
 class FakeSafeService {
   async prepareSafeTransaction(): Promise<{
@@ -38,7 +39,17 @@ describe("SafeSubmissionService", () => {
   it("prepares and submits a trade proposal to Safe Transaction Service", async () => {
     const repository = new MemoryRepository();
     const fakeSafeService = new FakeSafeService();
-    const service = new SafeSubmissionService(repository, fakeSafeService as never);
+    const walletLinkService = new WalletLinkService(repository);
+    const service = new SafeSubmissionService(repository, fakeSafeService as never, walletLinkService);
+    const linkedAt = new Date("2026-05-27T00:01:00.000Z");
+    await repository.saveWalletLink({
+      telegramUserId: "456",
+      address: "0x2222222222222222222222222222222222222222",
+      nonce: "nonce",
+      status: "linked",
+      createdAt: linkedAt,
+      linkedAt
+    });
     await repository.saveGroupWallet({
       chatId: "123",
       safeAddress: "0x1111111111111111111111111111111111111111",
@@ -56,6 +67,13 @@ describe("SafeSubmissionService", () => {
       feeAmountWei: 0n,
       route: "flap-portal",
       status: "created",
+      riskReport: {
+        tokenAddress: "0x3333333333333333333333333333333333333333",
+        level: "low",
+        blocked: false,
+        reasons: [],
+        checkedAt: new Date("2026-05-27T00:00:00.000Z")
+      },
       transactions: [
         {
           to: "0x4444444444444444444444444444444444444444",
@@ -71,7 +89,8 @@ describe("SafeSubmissionService", () => {
     const submitted = await service.submitOwnerSignature(
       submission.id,
       "0x2222222222222222222222222222222222222222",
-      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1b"
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1b",
+      "456"
     );
 
     expect(submitted.status).toBe("submitted");

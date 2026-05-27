@@ -6,6 +6,16 @@ create table if not exists group_wallets (
   created_at timestamptz not null
 );
 
+create table if not exists wallet_links (
+  telegram_user_id text not null,
+  address text not null,
+  nonce text not null,
+  status text not null,
+  created_at timestamptz not null,
+  linked_at timestamptz,
+  primary key (telegram_user_id, address)
+);
+
 create table if not exists trade_proposals (
   id text primary key,
   chat_id text not null references group_wallets(chat_id),
@@ -16,6 +26,7 @@ create table if not exists trade_proposals (
   fee_amount_wei text not null,
   route text not null,
   status text not null,
+  risk_report jsonb not null,
   transactions jsonb not null,
   created_at timestamptz not null
 );

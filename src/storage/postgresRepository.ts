@@ -9,10 +9,12 @@ import type {
   SafeSubmissionSourceType,
   SafeSubmissionStatus,
   SafeTransactionData,
+  TokenRiskReport,
   TradeProposal,
   TradeProposalStatus,
   TradeRoute,
-  VaultRecipient
+  VaultRecipient,
+  WalletLink
 } from "../domain/types.js";
 import type { Repository } from "./repository.js";
 
@@ -34,8 +36,18 @@ type TradeProposalRow = {
   fee_amount_wei: string;
   route: TradeRoute;
   status: TradeProposalStatus;
+  risk_report: StoredTokenRiskReport;
   transactions: ChainTransaction[];
   created_at: Date;
+};
+
+type WalletLinkRow = {
+  telegram_user_id: string;
+  address: Address;
+  nonce: string;
+  status: "pending" | "linked";
+  created_at: Date;
+  linked_at: Date | null;
 };
 
 type FlapLaunchRow = {
@@ -85,6 +97,10 @@ type StoredSafeTransactionData = Omit<
   nonce: string;
 };
 
+type StoredTokenRiskReport = Omit<TokenRiskReport, "checkedAt"> & {
+  checkedAt: string;
+};
+
 export class PostgresRepository implements Repository {
   private readonly pool: Pool;
 
@@ -120,10 +136,40 @@ export class PostgresRepository implements Repository {
     );
   }
 
+  async getWalletLink(telegramUserId: string, address: string): Promise<WalletLink | null> {
+    const result = await this.pool.query<WalletLinkRow>(
+      `select telegram_user_id, address, nonce, status, created_at, linked_at
+       from wallet_links where telegram_user_id = $1 and lower(address) = lower($2)`,
+      [telegramUserId, address]
+    );
+    const row = result.rows[0];
+    if (row === undefined) {
+      return null;
+    }
+    return {
+      telegramUserId: row.telegram_user_id,
+      address: row.address,
+      nonce: row.nonce,
+      status: row.status,
+      createdAt: row.created_at,
+      ...(row.linked_at === null ? {} : { linkedAt: row.linked_at })
+    };
+  }
+
+  async saveWalletLink(link: WalletLink): Promise<void> {
+    await this.pool.query(
+      `insert into wallet_links(telegram_user_id, address, nonce, status, created_at, linked_at)
+       values ($1, $2, $3, $4, $5, $6)
+       on conflict (telegram_user_id, address)
+       do update set nonce = excluded.nonce, status = excluded.status, linked_at = excluded.linked_at`,
+      [link.telegramUserId, link.address, link.nonce, link.status, link.createdAt, link.linkedAt ?? null]
+    );
+  }
+
   async getTradeProposal(id: string): Promise<TradeProposal | null> {
     const result = await this.pool.query<TradeProposalRow>(
       `select id, chat_id, proposer_telegram_id, token_address, input_amount_wei, min_output_amount,
-       fee_amount_wei, route, status, transactions, created_at
+       fee_amount_wei, route, status, risk_report, transactions, created_at
        from trade_proposals where id = $1`,
       [id]
     );
@@ -141,6 +187,7 @@ export class PostgresRepository implements Repository {
       feeAmountWei: BigInt(row.fee_amount_wei),
       route: row.route,
       status: row.status,
+      riskReport: deserializeRiskReport(row.risk_report),
       transactions: deserializeTransactions(row.transactions as unknown as StoredChainTransaction[]),
       createdAt: row.created_at
     };
@@ -150,8 +197,8 @@ export class PostgresRepository implements Repository {
     await this.pool.query(
       `insert into trade_proposals(
         id, chat_id, proposer_telegram_id, token_address, input_amount_wei, min_output_amount,
-        fee_amount_wei, route, status, transactions, created_at
-      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        fee_amount_wei, route, status, risk_report, transactions, created_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         proposal.id,
         proposal.chatId,
@@ -162,6 +209,7 @@ export class PostgresRepository implements Repository {
         proposal.feeAmountWei.toString(),
         proposal.route,
         proposal.status,
+        JSON.stringify(serializeRiskReport(proposal.riskReport)),
         JSON.stringify(serializeTransactions(proposal.transactions)),
         proposal.createdAt
       ]
@@ -313,5 +361,19 @@ function deserializeSafeTransaction(transaction: StoredSafeTransactionData): Saf
     baseGas: BigInt(transaction.baseGas),
     gasPrice: BigInt(transaction.gasPrice),
     nonce: BigInt(transaction.nonce)
+  };
+}
+
+function serializeRiskReport(report: TokenRiskReport): StoredTokenRiskReport {
+  return {
+    ...report,
+    checkedAt: report.checkedAt.toISOString()
+  };
+}
+
+function deserializeRiskReport(report: StoredTokenRiskReport): TokenRiskReport {
+  return {
+    ...report,
+    checkedAt: new Date(report.checkedAt)
   };
 }

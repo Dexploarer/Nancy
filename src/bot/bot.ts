@@ -11,12 +11,16 @@ import { TradeService } from "../services/tradeService.js";
 import { FlapLaunchService } from "../services/flapLaunchService.js";
 import { SafeSubmissionService } from "../services/safeSubmissionService.js";
 import type { Hex } from "viem";
+import { WalletLinkService } from "../services/walletLinkService.js";
+import { FlapMetadataService } from "../services/flapMetadataService.js";
 
 type BotDependencies = {
   repository: Repository;
   groupWalletService: GroupWalletService;
+  walletLinkService: WalletLinkService;
   tradeService: TradeService;
   flapLaunchService: FlapLaunchService;
+  flapMetadataService: FlapMetadataService;
   safeSubmissionService: SafeSubmissionService;
   config: AppConfig;
 };
@@ -28,8 +32,12 @@ export function createBot(dependencies: BotDependencies): Bot {
     await ctx.reply(
       [
         "The Family trading bot MVP",
+        "/link_start <ownerAddress>",
+        "/link_submit <ownerAddress> <signature>",
+        "/safe_create <threshold> <owner1> [owner2 ...]",
         "/wallet_set <safeAddress> <threshold> <owner1> [owner2 ...]",
         "/buy <tokenAddress> <bnbAmount> [slippageBps]",
+        "/flap_metadata <name>|<symbol>|<description>|<imageUri>|[website]|[telegram]|[x]",
         "/flap_launch <name>|<symbol>|<metadataCid>|<buyTaxBps>|<sellTaxBps>|<taxDays>|<recipient:bps,...>|<initialBuyBnb>",
         "/safe_prepare trade <proposalId>",
         "/safe_prepare flap <launchId>",
@@ -40,9 +48,31 @@ export function createBot(dependencies: BotDependencies): Bot {
     );
   });
 
+  bot.command("link_start", async (ctx) => {
+    await handleUserCommand(ctx, async () => {
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const parts = splitCommand(ctx.message?.text, 2);
+      const address = parseAddress(requiredPart(parts, 1));
+      const result = await dependencies.walletLinkService.beginLink(fromId, address);
+      await ctx.reply(["Sign this message with the owner wallet:", result.message].join("\n\n"));
+    });
+  });
+
+  bot.command("link_submit", async (ctx) => {
+    await handleUserCommand(ctx, async () => {
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const parts = splitCommand(ctx.message?.text, 3);
+      const address = parseAddress(requiredPart(parts, 1));
+      const signature = parseHex(requiredPart(parts, 2), "signature");
+      const link = await dependencies.walletLinkService.completeLink(fromId, address, signature);
+      await ctx.reply(`Linked wallet ${link.address}`);
+    });
+  });
+
   bot.command("wallet_set", async (ctx) => {
     await handleUserCommand(ctx, async () => {
       const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
       const parts = splitCommand(ctx.message?.text, 4);
       const safeAddress = parseAddress(requiredPart(parts, 1));
       const threshold = parsePositiveInteger(requiredPart(parts, 2), "threshold");
@@ -52,6 +82,28 @@ export function createBot(dependencies: BotDependencies): Bot {
       }
       const wallet = await dependencies.groupWalletService.setWallet(chatId, safeAddress, threshold, owners);
       await ctx.reply(formatWallet(wallet));
+    });
+  });
+
+  bot.command("safe_create", async (ctx) => {
+    await handleUserCommand(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
+      const parts = splitCommand(ctx.message?.text, 3);
+      const threshold = parsePositiveInteger(requiredPart(parts, 1), "threshold");
+      const owners = parts.slice(2).map(parseAddress);
+      if (threshold > owners.length) {
+        throw new UserInputError("Threshold cannot exceed owner count", { threshold, owners: owners.length });
+      }
+      await ctx.reply(
+        [
+          "Create the group Safe in Safe Wallet, then return with /wallet_set <safeAddress> ...",
+          "Network: BNB Chain",
+          `Threshold: ${threshold}/${owners.length}`,
+          `Owners: ${owners.join(", ")}`,
+          "Safe Wallet: https://app.safe.global/"
+        ].join("\n")
+      );
     });
   });
 
@@ -103,6 +155,7 @@ export function createBot(dependencies: BotDependencies): Bot {
   bot.command("flap_launch", async (ctx) => {
     await handleUserCommand(ctx, async () => {
       const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
       const fromId = requireTelegramUserId(ctx.from?.id);
       const commandText = ctx.message?.text;
       if (commandText === undefined) {
@@ -134,6 +187,32 @@ export function createBot(dependencies: BotDependencies): Bot {
     });
   });
 
+  bot.command("flap_metadata", async (ctx) => {
+    await handleUserCommand(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
+      const commandText = ctx.message?.text;
+      if (commandText === undefined) {
+        throw new UserInputError("Missing command text");
+      }
+      const payload = commandText.replace(/^\/flap_metadata(@\w+)?\s*/, "");
+      const parts = payload.split("|");
+      if (parts.length < 4 || parts.length > 7) {
+        throw new UserInputError("Invalid flap_metadata format");
+      }
+      const metadataUri = await dependencies.flapMetadataService.createMetadata({
+        name: requiredPart(parts, 0),
+        symbol: requiredPart(parts, 1),
+        description: requiredPart(parts, 2),
+        imageUri: requiredPart(parts, 3),
+        ...(emptyToUndefined(parts[4]) === undefined ? {} : { website: requiredPart(parts, 4) }),
+        ...(emptyToUndefined(parts[5]) === undefined ? {} : { telegram: requiredPart(parts, 5) }),
+        ...(emptyToUndefined(parts[6]) === undefined ? {} : { x: requiredPart(parts, 6) })
+      });
+      await ctx.reply(`Flap metadata uploaded: ${metadataUri}`);
+    });
+  });
+
   bot.command("safe_prepare", async (ctx) => {
     await handleUserCommand(ctx, async () => {
       const chatId = requireChatId(ctx.chat?.id);
@@ -155,11 +234,12 @@ export function createBot(dependencies: BotDependencies): Bot {
 
   bot.command("safe_submit", async (ctx) => {
     await handleUserCommand(ctx, async () => {
+      const fromId = requireTelegramUserId(ctx.from?.id);
       const parts = splitCommand(ctx.message?.text, 4);
       const submissionId = requiredPart(parts, 1);
       const ownerAddress = parseAddress(requiredPart(parts, 2));
       const signature = parseHex(requiredPart(parts, 3), "signature");
-      const submission = await dependencies.safeSubmissionService.submitOwnerSignature(submissionId, ownerAddress, signature);
+      const submission = await dependencies.safeSubmissionService.submitOwnerSignature(submissionId, ownerAddress, signature, fromId);
       await ctx.reply(formatSafeSubmission(submission));
     });
   });
@@ -174,6 +254,8 @@ export function createBot(dependencies: BotDependencies): Bot {
 
   bot.command("safe_execute", async (ctx) => {
     await handleUserCommand(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
       const parts = splitCommand(ctx.message?.text, 2);
       const txHash = await dependencies.safeSubmissionService.execute(requiredPart(parts, 1));
       await ctx.reply(`Safe execution submitted: ${txHash}`);
@@ -236,12 +318,26 @@ function requireTelegramUserId(userId: number | undefined): string {
   return userId.toString();
 }
 
+async function requireGroupAdmin(ctx: Context, chatId: string): Promise<void> {
+  if (ctx.from === undefined) {
+    throw new UserInputError("Command must be sent by a Telegram user");
+  }
+  const member = await ctx.api.getChatMember(chatId, ctx.from.id);
+  if (member.status !== "creator" && member.status !== "administrator") {
+    throw new UserInputError("Only Telegram group admins can run this command");
+  }
+}
+
 function requiredPart(parts: string[], index: number): string {
   const part = parts[index];
   if (part === undefined || part.length === 0) {
     throw new UserInputError("Missing required field", { index });
   }
   return part;
+}
+
+function emptyToUndefined(value: string | undefined): string | undefined {
+  return value === undefined || value.length === 0 ? undefined : value;
 }
 
 function parseHex(value: string, label: string): Hex {

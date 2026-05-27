@@ -7,6 +7,7 @@ import { NATIVE_TOKEN_ADDRESS } from "../chain/addresses.js";
 import { buildFeeTransaction, splitTradingFee } from "../chain/feeService.js";
 import { calculateMinOutput, FlapService } from "../chain/flapService.js";
 import { PancakeSwapService } from "../chain/pancakeSwapService.js";
+import { TokenRiskService } from "./tokenRiskService.js";
 
 export type CreateNativeBuyInput = {
   chatId: ChatId;
@@ -23,7 +24,8 @@ export class TradeService {
   constructor(
     private readonly repository: Repository,
     private readonly flapService: FlapService,
-    private readonly pancakeSwapService: PancakeSwapService
+    private readonly pancakeSwapService: PancakeSwapService,
+    private readonly tokenRiskService: TokenRiskService
   ) {}
 
   async createNativeBuyProposal(input: CreateNativeBuyInput): Promise<TradeProposal> {
@@ -36,16 +38,20 @@ export class TradeService {
     if (feeSplit.netAmount <= 0n) {
       throw new UserInputError("Trade amount is too small after platform fee");
     }
+    const riskReport = await this.tokenRiskService.checkBscToken(input.tokenAddress);
+    if (riskReport.blocked) {
+      throw new UserInputError("Token failed risk checks", { reasons: riskReport.reasons.join("; ") });
+    }
 
     const flapState = await this.flapService.inspectToken(input.tokenAddress);
     if (flapState.status === "tradable") {
-      return this.createFlapNativeBuyProposal(input, feeSplit.netAmount, feeSplit.feeAmount);
+      return this.createFlapNativeBuyProposal(input, feeSplit.netAmount, feeSplit.feeAmount, riskReport);
     }
     if (flapState.status === "staged" || flapState.status === "unknown") {
       throw new UserInputError("Token is not a tradable Flap bonding-curve token", { status: flapState.status });
     }
 
-    return this.createPancakeNativeBuyProposal(input, wallet.safeAddress, feeSplit.netAmount, feeSplit.feeAmount);
+    return this.createPancakeNativeBuyProposal(input, wallet.safeAddress, feeSplit.netAmount, feeSplit.feeAmount, riskReport);
   }
 
   async getProposal(id: string): Promise<TradeProposal | null> {
@@ -55,7 +61,8 @@ export class TradeService {
   private async createFlapNativeBuyProposal(
     input: CreateNativeBuyInput,
     netAmountWei: bigint,
-    feeAmountWei: bigint
+    feeAmountWei: bigint,
+    riskReport: Awaited<ReturnType<TokenRiskService["checkBscToken"]>>
   ): Promise<TradeProposal> {
     const quote = await this.flapService.quoteNativeBuy(input.tokenAddress, netAmountWei);
     const minOutputAmount = calculateMinOutput(quote, input.slippageBps);
@@ -74,6 +81,7 @@ export class TradeService {
       feeAmountWei,
       route: "flap-portal",
       status: "created",
+      riskReport,
       transactions,
       createdAt: new Date()
     };
@@ -85,7 +93,8 @@ export class TradeService {
     input: CreateNativeBuyInput,
     recipient: Address,
     netAmountWei: bigint,
-    feeAmountWei: bigint
+    feeAmountWei: bigint,
+    riskReport: Awaited<ReturnType<TokenRiskService["checkBscToken"]>>
   ): Promise<TradeProposal> {
     const quote = await this.pancakeSwapService.quoteNativeBuy(input.tokenAddress, netAmountWei);
     const minOutputAmount = calculateMinOutput(quote, input.slippageBps);
@@ -110,6 +119,7 @@ export class TradeService {
       feeAmountWei,
       route: "pancakeswap-v2",
       status: "created",
+      riskReport,
       transactions,
       createdAt: new Date()
     };

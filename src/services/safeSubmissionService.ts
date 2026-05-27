@@ -10,6 +10,7 @@ import type {
 import type { Repository } from "../storage/repository.js";
 import { createId } from "../utils/ids.js";
 import { extractConfirmations, SafeService } from "../chain/safeService.js";
+import { WalletLinkService } from "./walletLinkService.js";
 
 type PreparedSafeTransaction = {
   safeTransaction: SafeTransactionData;
@@ -20,7 +21,8 @@ type PreparedSafeTransaction = {
 export class SafeSubmissionService {
   constructor(
     private readonly repository: Repository,
-    private readonly safeService: SafeService
+    private readonly safeService: SafeService,
+    private readonly walletLinkService: WalletLinkService
   ) {}
 
   async prepareTradeSubmission(chatId: ChatId, proposalId: string): Promise<SafeSubmission> {
@@ -39,7 +41,12 @@ export class SafeSubmissionService {
     return this.prepareSubmission(chatId, "flap-launch", proposal.id, proposal.transactions);
   }
 
-  async submitOwnerSignature(submissionId: string, ownerAddress: Address, signature: Hex): Promise<SafeSubmission> {
+  async submitOwnerSignature(
+    submissionId: string,
+    ownerAddress: Address,
+    signature: Hex,
+    telegramUserId: string
+  ): Promise<SafeSubmission> {
     const submission = await this.getSubmissionOrThrow(submissionId);
     const wallet = await this.repository.getGroupWallet(submission.chatId);
     if (wallet === null) {
@@ -49,6 +56,7 @@ export class SafeSubmissionService {
     if (!isOwner) {
       throw new UserInputError("Signer is not configured as a group Safe owner", { ownerAddress });
     }
+    await this.walletLinkService.requireLinkedOwner(telegramUserId, ownerAddress);
     const senderSignature = await this.safeService.normalizeOwnerSignature(submission.safeTxHash, ownerAddress, signature);
     if (submission.status === "prepared") {
       await this.safeService.proposeTransaction({

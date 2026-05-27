@@ -19,6 +19,7 @@ export function formatTradeProposal(proposal: TradeProposal): string {
     `Input: ${formatBnb(proposal.inputAmountWei)}`,
     `Platform fee: ${formatBnb(proposal.feeAmountWei)}`,
     `Minimum output: ${proposal.minOutputAmount.toString()}`,
+    `Risk: ${proposal.riskReport.level}${proposal.riskReport.reasons.length === 0 ? "" : ` (${proposal.riskReport.reasons.join("; ")})`}`,
     formatTransactions(proposal.transactions)
   ].join("\n");
 }
