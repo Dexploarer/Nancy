@@ -10,7 +10,7 @@ const EnvSchema = z.object({
   BSC_RPC_URL: z.string().url(),
   BSC_CHAIN_ID: z.coerce.number().int().refine((value) => value === 56 || value === 97),
   SAFE_TRANSACTION_SERVICE_URL: z.string().url(),
-  PINATA_JWT: z.string().min(1)
+  PINATA_JWT: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional())
 });
 
 const env = parseEnv();
@@ -29,19 +29,22 @@ await assertContractCode("Flap portal", addresses.portal);
 await assertContractCode("Flap vault portal", addresses.vaultPortal);
 await assertHttpOk(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe`, "Telegram getMe");
 await assertHttpOk(`${env.SAFE_TRANSACTION_SERVICE_URL.replace(/\/$/, "")}/api/v1/about/`, "Safe Transaction Service");
-await assertHttpOk("https://api.pinata.cloud/data/testAuthentication", "Pinata auth", {
-  Authorization: `Bearer ${env.PINATA_JWT}`
-});
+if (env.PINATA_JWT !== undefined) {
+  await assertHttpOk("https://api.pinata.cloud/data/testAuthentication", "Pinata auth", {
+    Authorization: `Bearer ${env.PINATA_JWT}`
+  });
+}
 
 Logger.info("[LiveAcceptance] Live acceptance checks passed", {
   chainId: env.BSC_CHAIN_ID,
-  safeProxyFactory: addresses.safeProxyFactory
+  safeProxyFactory: addresses.safeProxyFactory,
+  pinataChecked: env.PINATA_JWT !== undefined
 });
 
 function parseEnv(): z.infer<typeof EnvSchema> {
   const parsed = EnvSchema.safeParse(process.env);
   if (!parsed.success) {
-    throw new AppError("Live acceptance requires Telegram, BSC RPC, Safe Transaction Service, and Pinata env");
+    throw new AppError("Live acceptance requires Telegram, BSC RPC, and Safe Transaction Service env");
   }
   return parsed.data;
 }

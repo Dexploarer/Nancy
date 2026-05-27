@@ -12,7 +12,7 @@ Telegram MVP for BSC group trading wallets and Flap token launches.
 - Route migrated Flap tokens and regular BSC tokens through PancakeSwap V2.
 - Run token risk checks before buy proposals.
 - Add a minimal platform fee leg to bot-built trade proposals.
-- Upload Flap token metadata to IPFS through Pinata.
+- Optionally upload Flap token metadata to IPFS through Pinata.
 - Launch Flap `TOKEN_TAXED_V3` tokens through `VaultPortal` with the official Split Vault.
 - Route Flap launch commission to the configured platform wallet through Flap's existing `commissionReceiver`.
 - Prepare Safe transactions, collect owner signatures, and submit proposals/confirmations to Safe Transaction Service.
@@ -63,6 +63,10 @@ Example:
 /safe_prepare trade trade_...
 /safe_execute safe_...
 ```
+
+## Flap metadata
+
+Pinata is only needed for `/flap_metadata`, which uploads token metadata JSON and returns an `ipfs://` URI. `/flap_launch` accepts any metadata URI you already have, so Pinata is not required for trading or launching when metadata is hosted elsewhere.
 
 ## Safe creation flow
 

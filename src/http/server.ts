@@ -48,6 +48,8 @@ export async function startHttpRuntime(appState: App, config: AppConfig): Promis
     return;
   }
 
+  await appState.bot.api.deleteWebhook();
+  Logger.info("[HttpRuntime] Telegram webhook cleared for local polling");
   await appState.bot.start();
 }
 
