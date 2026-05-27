@@ -41,6 +41,20 @@ export type WalletLink = {
   linkedAt?: Date;
 };
 
+export type EncryptedPrivateKey = {
+  ciphertext: Hex;
+  iv: Hex;
+  authTag: Hex;
+};
+
+export type ManagedWallet = {
+  telegramUserId: string;
+  address: Address;
+  encryptedPrivateKey: EncryptedPrivateKey;
+  createdAt: Date;
+  lastUsedAt?: Date;
+};
+
 export type SafeCreationSessionStatus = "collecting" | "deployed";
 
 export type SafeCreationOwner = {

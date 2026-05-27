@@ -2,6 +2,8 @@ import type { Bot } from "grammy";
 
 export const BOT_COMMANDS = [
   { command: "start", description: "Open the group trading menu" },
+  { command: "wallet_generate", description: "Create a bot-managed owner wallet" },
+  { command: "wallet_managed", description: "Show your bot-managed owner wallet" },
   { command: "link_start", description: "Start wallet linking" },
   { command: "link_submit", description: "Submit wallet link signature" },
   { command: "safe_group", description: "Collect group members and deploy a Safe" },

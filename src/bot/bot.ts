@@ -7,6 +7,8 @@ import { Logger } from "../logger.js";
 import { createFlapSalt, parseVaultRecipients } from "../chain/flapService.js";
 import {
   formatFlapLaunch,
+  formatGeneratedManagedWallet,
+  formatManagedWallet,
   formatSafeDeployment,
   formatSafeCreationSession,
   formatSafeStatus,
@@ -22,8 +24,10 @@ import { WalletLinkService } from "../services/walletLinkService.js";
 import { FlapMetadataService } from "../services/flapMetadataService.js";
 import { SafeDeploymentService } from "../services/safeDeploymentService.js";
 import { SafeGroupSetupService } from "../services/safeGroupSetupService.js";
+import { ManagedWalletService } from "../services/managedWalletService.js";
 import { BOT_COMMANDS } from "./telegramCommands.js";
-import { helpText, mainMenuKeyboard, safeGroupKeyboard } from "./keyboards.js";
+import { helpText, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
+import { registerSafeCallbacks } from "./safeCallbacks.js";
 import {
   emptyToUndefined,
   parsePositiveInteger,
@@ -34,10 +38,11 @@ import {
   splitCommand
 } from "./commandUtils.js";
 
-type BotDependencies = {
+export type BotDependencies = {
   repository: Repository;
   groupWalletService: GroupWalletService;
   walletLinkService: WalletLinkService;
+  managedWalletService: ManagedWalletService;
   tradeService: TradeService;
   flapLaunchService: FlapLaunchService;
   flapMetadataService: FlapMetadataService;
@@ -60,6 +65,27 @@ export function createBot(dependencies: BotDependencies): Bot {
       ].join("\n"),
       { reply_markup: mainMenuKeyboard() }
     );
+  });
+
+  bot.command("wallet_generate", async (ctx) => {
+    await handleUserCommand(ctx, async () => {
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const generated = await dependencies.managedWalletService.generate(fromId);
+      const message = formatGeneratedManagedWallet(generated);
+      if (ctx.chat?.type === "private") {
+        await ctx.reply(message);
+        return;
+      }
+      await sendPrivateMessage(ctx, message);
+      await ctx.reply(`Managed wallet created and sent by DM: ${generated.wallet.address}`);
+    });
+  });
+
+  bot.command("wallet_managed", async (ctx) => {
+    await handleUserCommand(ctx, async () => {
+      const wallet = await dependencies.managedWalletService.requireWallet(requireTelegramUserId(ctx.from?.id));
+      await ctx.reply(formatManagedWallet(wallet));
+    });
   });
 
   bot.command("link_start", async (ctx) => {
@@ -265,7 +291,9 @@ export function createBot(dependencies: BotDependencies): Bot {
       if (submission === null) {
         throw new UserInputError("safe_prepare source must be trade or flap");
       }
-      await ctx.reply(formatSafeSubmission(submission, dependencies.config.publicBaseUrl));
+      await ctx.reply(formatSafeSubmission(submission, dependencies.config.publicBaseUrl), {
+        reply_markup: safeSubmissionKeyboard(submission.id)
+      });
     });
   });
 
@@ -277,7 +305,9 @@ export function createBot(dependencies: BotDependencies): Bot {
       const ownerAddress = parseAddress(requiredPart(parts, 2));
       const signature = parseHex(requiredPart(parts, 3), "signature");
       const submission = await dependencies.safeSubmissionService.submitOwnerSignature(submissionId, ownerAddress, signature, fromId);
-      await ctx.reply(formatSafeSubmission(submission, dependencies.config.publicBaseUrl));
+      await ctx.reply(formatSafeSubmission(submission, dependencies.config.publicBaseUrl), {
+        reply_markup: safeSubmissionKeyboard(submission.id)
+      });
     });
   });
 
@@ -307,38 +337,7 @@ export function createBot(dependencies: BotDependencies): Bot {
     });
   });
 
-  bot.callbackQuery(/^safe_join:/, async (ctx) => {
-    await handleCallback(ctx, async () => {
-      const sessionId = ctx.callbackQuery.data.slice("safe_join:".length);
-      const session = await dependencies.safeGroupSetupService.joinWithDefaultWallet(sessionId, requireTelegramUserId(ctx.from?.id));
-      await ctx.answerCallbackQuery({ text: "Owner wallet joined" });
-      await ctx.editMessageText(formatSafeCreationSession(session), {
-        reply_markup: safeGroupKeyboard(session)
-      });
-    });
-  });
-
-  bot.callbackQuery(/^safe_refresh:/, async (ctx) => {
-    await handleCallback(ctx, async () => {
-      const session = await dependencies.safeGroupSetupService.getSession(ctx.callbackQuery.data.slice("safe_refresh:".length));
-      await ctx.answerCallbackQuery({ text: "Refreshed" });
-      await ctx.editMessageText(formatSafeCreationSession(session), {
-        reply_markup: safeGroupKeyboard(session)
-      });
-    });
-  });
-
-  bot.callbackQuery(/^safe_deploy:/, async (ctx) => {
-    await handleCallback(ctx, async () => {
-      const chatId = requireChatId(ctx.chat?.id);
-      await requireGroupAdmin(ctx, chatId);
-      const result = await dependencies.safeGroupSetupService.deploy(ctx.callbackQuery.data.slice("safe_deploy:".length));
-      await ctx.answerCallbackQuery({ text: "Safe deployed" });
-      await ctx.editMessageText(
-        [formatSafeCreationSession(result.session), "", formatSafeDeployment(result.deployment), "", formatWallet(result.wallet)].join("\n")
-      );
-    });
-  });
+  registerSafeCallbacks(bot, dependencies);
 
   bot.on("callback_query:data", async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -374,5 +373,17 @@ async function handleCallback(ctx: Context, action: () => Promise<void>): Promis
     }
     Logger.error("[TelegramBot] Callback failed", { err: error instanceof Error ? error : undefined });
     await ctx.answerCallbackQuery({ text: "Action failed", show_alert: true });
+  }
+}
+
+async function sendPrivateMessage(ctx: Context, message: string): Promise<void> {
+  const userId = ctx.from?.id;
+  if (userId === undefined) {
+    throw new UserInputError("Command must be sent by a Telegram user");
+  }
+  try {
+    await ctx.api.sendMessage(userId, message);
+  } catch {
+    throw new UserInputError("Open a private chat with this bot first so it can send your wallet key");
   }
 }

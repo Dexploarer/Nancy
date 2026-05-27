@@ -2,6 +2,7 @@ import type {
   ChainTransaction,
   FlapLaunchProposal,
   GroupWallet,
+  ManagedWallet,
   SafeCreationSession,
   SafeSubmission,
   TradeProposal
@@ -9,6 +10,7 @@ import type {
 import { formatBnb } from "../utils/evm.js";
 import type { SafeDeployment } from "../services/safeDeploymentService.js";
 import type { SafeTransactionServiceStatus } from "../chain/safeService.js";
+import type { GeneratedManagedWallet } from "../services/managedWalletService.js";
 
 export function formatWallet(wallet: GroupWallet): string {
   return [
@@ -16,6 +18,19 @@ export function formatWallet(wallet: GroupWallet): string {
     `Safe: ${wallet.safeAddress}`,
     `Threshold: ${wallet.threshold}/${wallet.owners.length}`,
     `Owners: ${wallet.owners.join(", ")}`
+  ].join("\n");
+}
+
+export function formatManagedWallet(wallet: ManagedWallet): string {
+  return ["Bot-managed owner wallet", `Address: ${wallet.address}`, `Created: ${wallet.createdAt.toISOString()}`].join("\n");
+}
+
+export function formatGeneratedManagedWallet(generated: GeneratedManagedWallet): string {
+  return [
+    "Bot-managed owner wallet created",
+    `Address: ${generated.wallet.address}`,
+    "Save this private key now. It will not be shown again.",
+    generated.privateKey
   ].join("\n");
 }
 
@@ -85,8 +100,8 @@ export function formatSafeSubmission(submission: SafeSubmission, publicBaseUrl?:
     `Nonce: ${submission.safeTransaction.nonce.toString()}`,
     `Service: ${submission.transactionServiceUrl}`,
     "Owner flow:",
-    `1. Open ${signingUrl}.`,
-    `2. Sign with a linked Safe owner wallet and submit from the page.`
+    `1. Tap Approve with managed wallet, or open ${signingUrl}.`,
+    `2. External owners sign with a linked Safe owner wallet and submit from the page.`
   ].join("\n");
 }
 

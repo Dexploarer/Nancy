@@ -3,6 +3,7 @@ import { UserInputError } from "../domain/errors.js";
 import type { ChatId, GroupWallet, SafeCreationSession } from "../domain/types.js";
 import type { Repository } from "../storage/repository.js";
 import { createId } from "../utils/ids.js";
+import { ManagedWalletService, type GeneratedManagedWallet } from "./managedWalletService.js";
 import { SafeDeploymentService, type SafeDeployment } from "./safeDeploymentService.js";
 
 export type SafeGroupDeployment = {
@@ -14,7 +15,8 @@ export type SafeGroupDeployment = {
 export class SafeGroupSetupService {
   constructor(
     private readonly repository: Repository,
-    private readonly safeDeploymentService: SafeDeploymentService
+    private readonly safeDeploymentService: SafeDeploymentService,
+    private readonly managedWalletService: ManagedWalletService
   ) {}
 
   async createSession(chatId: ChatId, creatorTelegramId: string, threshold: number): Promise<SafeCreationSession> {
@@ -47,6 +49,16 @@ export class SafeGroupSetupService {
       throw new UserInputError("Linked wallet not found");
     }
     return this.joinWithWallet(sessionId, telegramUserId, link.address);
+  }
+
+  async generateManagedWalletAndJoin(sessionId: string, telegramUserId: string): Promise<{
+    generated: GeneratedManagedWallet;
+    session: SafeCreationSession;
+  }> {
+    await this.getCollectingSession(sessionId);
+    const generated = await this.managedWalletService.generate(telegramUserId);
+    const session = await this.joinWithWallet(sessionId, telegramUserId, generated.wallet.address);
+    return { generated, session };
   }
 
   async joinWithWallet(sessionId: string, telegramUserId: string, ownerAddress: Address): Promise<SafeCreationSession> {

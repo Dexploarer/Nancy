@@ -11,25 +11,33 @@ export function mainMenuKeyboard(): InlineKeyboard {
 }
 
 export function safeGroupKeyboard(session: SafeCreationSession): InlineKeyboard {
-  const keyboard = new InlineKeyboard().text("Join as owner", `safe_join:${session.id}`).text("Refresh", `safe_refresh:${session.id}`);
+  const keyboard = new InlineKeyboard()
+    .text("Generate + join", `managed_join:${session.id}`)
+    .text("Join linked wallet", `safe_join:${session.id}`)
+    .row()
+    .text("Refresh", `safe_refresh:${session.id}`);
   if (session.owners.length >= session.threshold && session.status === "collecting") {
     keyboard.row().text("Deploy Safe", `safe_deploy:${session.id}`);
   }
   return keyboard;
 }
 
+export function safeSubmissionKeyboard(submissionId: string): InlineKeyboard {
+  return new InlineKeyboard().text("Approve with managed wallet", `safe_approve:${submissionId}`);
+}
+
 export function helpText(topic: string): string {
   if (topic === "safe_group") {
     return [
       "Group Safe setup",
-      "1. Each owner links a wallet with /link_start and /link_submit.",
+      "1. Each owner taps Generate + join or links a wallet with /link_start and /link_submit.",
       "2. A group admin runs /safe_group <threshold>.",
-      "3. Members tap Join as owner.",
+      "3. Members join from the inline buttons.",
       "4. A group admin taps Deploy Safe."
     ].join("\n");
   }
   if (topic === "link") {
-    return ["Link wallet", "/link_start <ownerAddress>", "/link_submit <ownerAddress> <signature>"].join("\n");
+    return ["Wallets", "/wallet_generate", "/wallet_managed", "/link_start <ownerAddress>", "/link_submit <ownerAddress> <signature>"].join("\n");
   }
   if (topic === "buy") {
     return ["Buy token", "/buy <tokenAddress> <bnbAmount> [slippageBps]", "Example: /buy 0x... 0.05 150"].join("\n");

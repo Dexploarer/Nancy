@@ -13,6 +13,8 @@ import { TokenRiskService } from "./services/tokenRiskService.js";
 import { FlapMetadataService } from "./services/flapMetadataService.js";
 import { SafeDeploymentService } from "./services/safeDeploymentService.js";
 import { SafeGroupSetupService } from "./services/safeGroupSetupService.js";
+import { WalletEncryptionService } from "./services/walletEncryptionService.js";
+import { ManagedWalletService } from "./services/managedWalletService.js";
 import { MemoryRepository } from "./storage/memoryRepository.js";
 import { PostgresRepository } from "./storage/postgresRepository.js";
 import type { Repository } from "./storage/repository.js";
@@ -25,6 +27,7 @@ export type App = {
   safeSubmissionService: SafeSubmissionService;
   safeDeploymentService: SafeDeploymentService;
   safeGroupSetupService: SafeGroupSetupService;
+  managedWalletService: ManagedWalletService;
   walletLinkService: WalletLinkService;
   flapMetadataService: FlapMetadataService;
 };
@@ -44,13 +47,15 @@ export function buildApp(config: AppConfig): App {
   );
   const groupWalletService = new GroupWalletService(repository);
   const walletLinkService = new WalletLinkService(repository);
+  const walletEncryptionService = new WalletEncryptionService(config.walletEncryptionKey);
+  const managedWalletService = new ManagedWalletService(repository, walletEncryptionService);
   const safeDeploymentService = new SafeDeploymentService(
     addresses,
     config.bscRpcUrl,
     config.bscChainId,
     config.safeExecutorPrivateKey
   );
-  const safeGroupSetupService = new SafeGroupSetupService(repository, safeDeploymentService);
+  const safeGroupSetupService = new SafeGroupSetupService(repository, safeDeploymentService, managedWalletService);
   const tokenRiskService = new TokenRiskService({
     mode: config.riskCheckMode,
     minLiquidityUsd: config.minLiquidityUsd,
@@ -65,6 +70,7 @@ export function buildApp(config: AppConfig): App {
     repository,
     groupWalletService,
     walletLinkService,
+    managedWalletService,
     tradeService,
     flapLaunchService,
     flapMetadataService,
@@ -79,6 +85,7 @@ export function buildApp(config: AppConfig): App {
     safeSubmissionService,
     safeDeploymentService,
     safeGroupSetupService,
+    managedWalletService,
     walletLinkService,
     flapMetadataService
   };

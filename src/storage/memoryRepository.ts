@@ -2,6 +2,7 @@ import type {
   ChatId,
   FlapLaunchProposal,
   GroupWallet,
+  ManagedWallet,
   SafeCreationSession,
   SafeSubmission,
   TradeProposal,
@@ -12,6 +13,7 @@ import type { Repository } from "./repository.js";
 export class MemoryRepository implements Repository {
   private readonly groupWallets = new Map<ChatId, GroupWallet>();
   private readonly walletLinks = new Map<string, WalletLink>();
+  private readonly managedWallets = new Map<string, ManagedWallet>();
   private readonly safeCreationSessions = new Map<string, SafeCreationSession>();
   private readonly tradeProposals = new Map<string, TradeProposal>();
   private readonly flapLaunches = new Map<string, FlapLaunchProposal>();
@@ -35,6 +37,14 @@ export class MemoryRepository implements Repository {
 
   async getLinkedWalletsByTelegramUserId(telegramUserId: string): Promise<WalletLink[]> {
     return [...this.walletLinks.values()].filter((link) => link.telegramUserId === telegramUserId && link.status === "linked");
+  }
+
+  async getManagedWallet(telegramUserId: string): Promise<ManagedWallet | null> {
+    return this.managedWallets.get(telegramUserId) ?? null;
+  }
+
+  async saveManagedWallet(wallet: ManagedWallet): Promise<void> {
+    this.managedWallets.set(wallet.telegramUserId, wallet);
   }
 
   async getSafeCreationSession(id: string): Promise<SafeCreationSession | null> {

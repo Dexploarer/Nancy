@@ -25,9 +25,11 @@ TELEGRAM_WEBHOOK_SECRET=<random-32-byte-string>
 RISK_CHECK_MODE=warn
 SAFE_TRANSACTION_SERVICE_URL=https://api.safe.global/tx-service/bnb
 SAFE_EXECUTOR_PRIVATE_KEY=<gas-only-deployer-and-executor-key>
+WALLET_ENCRYPTION_KEY=<32-byte-hex-key>
 ```
 
 `SAFE_EXECUTOR_PRIVATE_KEY` pays gas for `/safe_create` and `/safe_execute`; it must not be a Safe owner key.
+`WALLET_ENCRYPTION_KEY` encrypts bot-managed owner wallets used by `/wallet_generate` and managed approval buttons.
 
 ## Launch steps
 
@@ -39,9 +41,9 @@ SAFE_EXECUTOR_PRIVATE_KEY=<gas-only-deployer-and-executor-key>
 6. Start with `bun start`.
 7. Confirm `GET /health` returns `{ "ok": true }`.
 8. Add the bot to a Telegram group and keep privacy mode compatible with slash commands.
-9. Link every Safe owner with `/link_start` and `/link_submit`.
-10. Use `/safe_group <threshold>`, have owners tap `Join as owner`, then deploy from the inline button.
-11. Create a small test proposal, prepare it, sign from `/sign/<safeSubmissionId>`, and verify it appears in Safe Wallet before funding the Safe materially.
+9. Generate bot-managed owner wallets with `/wallet_generate` or link external owners with `/link_start` and `/link_submit`.
+10. Use `/safe_group <threshold>`, have owners tap `Generate + join` or `Join linked wallet`, then deploy from the inline button.
+11. Create a small test proposal, prepare it, approve with a managed wallet button or sign from `/sign/<safeSubmissionId>`, and verify it appears in Safe Wallet before funding the Safe materially.
 
 ## Mainnet release gates
 
@@ -53,4 +55,5 @@ SAFE_EXECUTOR_PRIVATE_KEY=<gas-only-deployer-and-executor-key>
 - Review GoPlus/DexScreener risk output for at least five known tokens.
 - Confirm Telegram group admin checks block a non-admin.
 - Confirm a non-linked Telegram user cannot submit a Safe owner signature.
+- Confirm generated wallet private keys are delivered only by DM and managed approval recovers to the Safe owner address.
 - Confirm `/safe_group` only accepts linked wallets and the deploy receipt contains the expected `ProxyCreation` event.

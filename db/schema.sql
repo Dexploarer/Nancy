@@ -16,6 +16,14 @@ create table if not exists wallet_links (
   primary key (telegram_user_id, address)
 );
 
+create table if not exists managed_wallets (
+  telegram_user_id text primary key,
+  address text not null unique,
+  encrypted_private_key jsonb not null,
+  created_at timestamptz not null,
+  last_used_at timestamptz
+);
+
 create table if not exists safe_creation_sessions (
   id text primary key,
   chat_id text not null,

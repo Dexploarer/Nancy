@@ -3,6 +3,7 @@ import type {
   ChatId,
   FlapLaunchProposal,
   GroupWallet,
+  ManagedWallet,
   SafeCreationSession,
   SafeSubmission,
   TradeProposal,
@@ -20,6 +21,7 @@ import {
 import type {
   FlapLaunchRow,
   GroupWalletRow,
+  ManagedWalletRow,
   SafeCreationSessionRow,
   SafeSubmissionRow,
   TradeProposalRow,
@@ -105,6 +107,41 @@ export class PostgresRepository implements Repository {
       createdAt: row.created_at,
       ...(row.linked_at === null ? {} : { linkedAt: row.linked_at })
     }));
+  }
+
+  async getManagedWallet(telegramUserId: string): Promise<ManagedWallet | null> {
+    const result = await this.pool.query<ManagedWalletRow>(
+      `select telegram_user_id, address, encrypted_private_key, created_at, last_used_at
+       from managed_wallets where telegram_user_id = $1`,
+      [telegramUserId]
+    );
+    const row = result.rows[0];
+    if (row === undefined) {
+      return null;
+    }
+    return {
+      telegramUserId: row.telegram_user_id,
+      address: row.address,
+      encryptedPrivateKey: row.encrypted_private_key,
+      createdAt: row.created_at,
+      ...(row.last_used_at === null ? {} : { lastUsedAt: row.last_used_at })
+    };
+  }
+
+  async saveManagedWallet(wallet: ManagedWallet): Promise<void> {
+    await this.pool.query(
+      `insert into managed_wallets(telegram_user_id, address, encrypted_private_key, created_at, last_used_at)
+       values ($1, $2, $3, $4, $5)
+       on conflict (telegram_user_id)
+       do update set encrypted_private_key = excluded.encrypted_private_key, last_used_at = excluded.last_used_at`,
+      [
+        wallet.telegramUserId,
+        wallet.address,
+        JSON.stringify(wallet.encryptedPrivateKey),
+        wallet.createdAt,
+        wallet.lastUsedAt ?? null
+      ]
+    );
   }
 
   async getSafeCreationSession(id: string): Promise<SafeCreationSession | null> {
