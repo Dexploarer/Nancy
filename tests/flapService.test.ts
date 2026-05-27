@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { createFlapSalt, encodeSplitVaultData, parseVaultRecipients } from "../src/chain/flapService.js";
 import { UserInputError } from "../src/domain/errors.js";
 

@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { z } from "zod";
 import { parseAddress } from "./utils/evm.js";
 

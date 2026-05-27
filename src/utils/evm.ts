@@ -1,4 +1,4 @@
-import { formatEther, isAddress, parseEther, type Address } from "viem";
+import { formatEther, isAddress, parseEther, type Address, type Hex } from "viem";
 import { UserInputError } from "../domain/errors.js";
 
 export function parseAddress(value: string): Address {
@@ -32,4 +32,11 @@ export function parseBasisPoints(value: string, max: number): number {
     throw new UserInputError("Basis points out of range", { value, max });
   }
   return bps;
+}
+
+export function parseHex(value: string, label: string): Hex {
+  if (!/^0x[0-9a-fA-F]*$/.test(value)) {
+    throw new UserInputError(`${label} must be a hex string`);
+  }
+  return value as Hex;
 }

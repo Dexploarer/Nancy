@@ -1,5 +1,5 @@
 import { privateKeyToAccount } from "viem/accounts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { MemoryRepository } from "../src/storage/memoryRepository.js";
 import { buildWalletLinkMessage, WalletLinkService } from "../src/services/walletLinkService.js";
 

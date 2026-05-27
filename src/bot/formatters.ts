@@ -1,5 +1,7 @@
 import type { ChainTransaction, FlapLaunchProposal, GroupWallet, SafeSubmission, TradeProposal } from "../domain/types.js";
 import { formatBnb } from "../utils/evm.js";
+import type { SafeDeployment } from "../services/safeDeploymentService.js";
+import type { SafeTransactionServiceStatus } from "../chain/safeService.js";
 
 export function formatWallet(wallet: GroupWallet): string {
   return [
@@ -39,7 +41,19 @@ export function formatFlapLaunch(proposal: FlapLaunchProposal): string {
   ].join("\n");
 }
 
-export function formatSafeSubmission(submission: SafeSubmission): string {
+export function formatSafeDeployment(deployment: SafeDeployment): string {
+  return [
+    "Safe created",
+    `Safe: ${deployment.safeAddress}`,
+    `Threshold: ${deployment.threshold}/${deployment.owners.length}`,
+    `Owners: ${deployment.owners.join(", ")}`,
+    `Deployment tx: ${deployment.transactionHash}`
+  ].join("\n");
+}
+
+export function formatSafeSubmission(submission: SafeSubmission, publicBaseUrl?: string): string {
+  const signingUrl =
+    publicBaseUrl === undefined ? `/sign/${submission.id}` : `${publicBaseUrl.replace(/\/$/, "")}/sign/${submission.id}`;
   return [
     `Safe submission ${submission.id}`,
     `Source: ${submission.sourceType} ${submission.sourceId}`,
@@ -49,12 +63,12 @@ export function formatSafeSubmission(submission: SafeSubmission): string {
     `Nonce: ${submission.safeTransaction.nonce.toString()}`,
     `Service: ${submission.transactionServiceUrl}`,
     "Owner flow:",
-    `1. Sign the Safe tx hash with personal_sign / eth_sign.`,
-    `2. Submit it here: /safe_submit ${submission.id} <ownerAddress> <signature>`
+    `1. Open ${signingUrl}.`,
+    `2. Sign with a linked Safe owner wallet and submit from the page.`
   ].join("\n");
 }
 
-export function formatSafeStatus(status: unknown): string {
+export function formatSafeStatus(status: SafeTransactionServiceStatus): string {
   return `Safe status:\n${JSON.stringify(status, null, 2)}`;
 }
 

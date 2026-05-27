@@ -2,17 +2,33 @@ import { Bot, type Context } from "grammy";
 import type { AppConfig } from "../config.js";
 import { AppError, UserInputError } from "../domain/errors.js";
 import type { Repository } from "../storage/repository.js";
-import { parseAddress, parseBasisPoints, parseBnbAmount } from "../utils/evm.js";
+import { parseAddress, parseBasisPoints, parseBnbAmount, parseHex } from "../utils/evm.js";
 import { Logger } from "../logger.js";
 import { createFlapSalt, parseVaultRecipients } from "../chain/flapService.js";
-import { formatFlapLaunch, formatSafeStatus, formatSafeSubmission, formatTradeProposal, formatWallet } from "./formatters.js";
+import {
+  formatFlapLaunch,
+  formatSafeDeployment,
+  formatSafeStatus,
+  formatSafeSubmission,
+  formatTradeProposal,
+  formatWallet
+} from "./formatters.js";
 import { GroupWalletService } from "../services/groupWalletService.js";
 import { TradeService } from "../services/tradeService.js";
 import { FlapLaunchService } from "../services/flapLaunchService.js";
 import { SafeSubmissionService } from "../services/safeSubmissionService.js";
-import type { Hex } from "viem";
 import { WalletLinkService } from "../services/walletLinkService.js";
 import { FlapMetadataService } from "../services/flapMetadataService.js";
+import { SafeDeploymentService } from "../services/safeDeploymentService.js";
+import {
+  emptyToUndefined,
+  parsePositiveInteger,
+  requireChatId,
+  requireGroupAdmin,
+  requiredPart,
+  requireTelegramUserId,
+  splitCommand
+} from "./commandUtils.js";
 
 type BotDependencies = {
   repository: Repository;
@@ -22,6 +38,7 @@ type BotDependencies = {
   flapLaunchService: FlapLaunchService;
   flapMetadataService: FlapMetadataService;
   safeSubmissionService: SafeSubmissionService;
+  safeDeploymentService: SafeDeploymentService;
   config: AppConfig;
 };
 
@@ -41,7 +58,6 @@ export function createBot(dependencies: BotDependencies): Bot {
         "/flap_launch <name>|<symbol>|<metadataCid>|<buyTaxBps>|<sellTaxBps>|<taxDays>|<recipient:bps,...>|<initialBuyBnb>",
         "/safe_prepare trade <proposalId>",
         "/safe_prepare flap <launchId>",
-        "/safe_submit <safeSubmissionId> <ownerAddress> <signature>",
         "/safe_status <safeSubmissionId>",
         "/safe_execute <safeSubmissionId>"
       ].join("\n")
@@ -95,15 +111,9 @@ export function createBot(dependencies: BotDependencies): Bot {
       if (threshold > owners.length) {
         throw new UserInputError("Threshold cannot exceed owner count", { threshold, owners: owners.length });
       }
-      await ctx.reply(
-        [
-          "Create the group Safe in Safe Wallet, then return with /wallet_set <safeAddress> ...",
-          "Network: BNB Chain",
-          `Threshold: ${threshold}/${owners.length}`,
-          `Owners: ${owners.join(", ")}`,
-          "Safe Wallet: https://app.safe.global/"
-        ].join("\n")
-      );
+      const deployment = await dependencies.safeDeploymentService.createSafe({ owners, threshold });
+      const wallet = await dependencies.groupWalletService.setWallet(chatId, deployment.safeAddress, threshold, owners);
+      await ctx.reply([formatSafeDeployment(deployment), "", formatWallet(wallet)].join("\n"));
     });
   });
 
@@ -228,7 +238,7 @@ export function createBot(dependencies: BotDependencies): Bot {
       if (submission === null) {
         throw new UserInputError("safe_prepare source must be trade or flap");
       }
-      await ctx.reply(formatSafeSubmission(submission));
+      await ctx.reply(formatSafeSubmission(submission, dependencies.config.publicBaseUrl));
     });
   });
 
@@ -240,7 +250,7 @@ export function createBot(dependencies: BotDependencies): Bot {
       const ownerAddress = parseAddress(requiredPart(parts, 2));
       const signature = parseHex(requiredPart(parts, 3), "signature");
       const submission = await dependencies.safeSubmissionService.submitOwnerSignature(submissionId, ownerAddress, signature, fromId);
-      await ctx.reply(formatSafeSubmission(submission));
+      await ctx.reply(formatSafeSubmission(submission, dependencies.config.publicBaseUrl));
     });
   });
 
@@ -280,69 +290,4 @@ async function handleUserCommand(ctx: Context, action: () => Promise<void>): Pro
     Logger.error("[TelegramBot] Command failed", { err: error instanceof Error ? error : undefined });
     await ctx.reply("Command failed");
   }
-}
-
-function splitCommand(text: string | undefined, minParts: number): string[] {
-  if (text === undefined) {
-    throw new UserInputError("Missing command text");
-  }
-  const parts = text.trim().split(/\s+/);
-  if (parts.length < minParts) {
-    throw new UserInputError("Missing command arguments");
-  }
-  return parts;
-}
-
-function parsePositiveInteger(value: string, label: string): number {
-  if (!/^\d+$/.test(value)) {
-    throw new UserInputError(`${label} must be a positive integer`, { value });
-  }
-  const parsed = Number(value);
-  if (parsed <= 0) {
-    throw new UserInputError(`${label} must be positive`, { value });
-  }
-  return parsed;
-}
-
-function requireChatId(chatId: number | undefined): string {
-  if (chatId === undefined) {
-    throw new UserInputError("Command must be used in a chat");
-  }
-  return chatId.toString();
-}
-
-function requireTelegramUserId(userId: number | undefined): string {
-  if (userId === undefined) {
-    throw new UserInputError("Command must be sent by a Telegram user");
-  }
-  return userId.toString();
-}
-
-async function requireGroupAdmin(ctx: Context, chatId: string): Promise<void> {
-  if (ctx.from === undefined) {
-    throw new UserInputError("Command must be sent by a Telegram user");
-  }
-  const member = await ctx.api.getChatMember(chatId, ctx.from.id);
-  if (member.status !== "creator" && member.status !== "administrator") {
-    throw new UserInputError("Only Telegram group admins can run this command");
-  }
-}
-
-function requiredPart(parts: string[], index: number): string {
-  const part = parts[index];
-  if (part === undefined || part.length === 0) {
-    throw new UserInputError("Missing required field", { index });
-  }
-  return part;
-}
-
-function emptyToUndefined(value: string | undefined): string | undefined {
-  return value === undefined || value.length === 0 ? undefined : value;
-}
-
-function parseHex(value: string, label: string): Hex {
-  if (!/^0x[0-9a-fA-F]*$/.test(value)) {
-    throw new UserInputError(`${label} must be a hex string`);
-  }
-  return value as Hex;
 }

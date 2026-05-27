@@ -1,5 +1,5 @@
 import { privateKeyToAccount } from "viem/accounts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { buildSignatureBytes, normalizeOwnerSignature, SafeService } from "../src/chain/safeService.js";
 import type { ChainTransaction } from "../src/domain/types.js";
 

@@ -1,15 +1,12 @@
 import { Pool } from "pg";
 import type { Address, Hex } from "viem";
 import type {
-  ChainTransaction,
   ChatId,
   FlapLaunchProposal,
   GroupWallet,
   SafeSubmission,
   SafeSubmissionSourceType,
   SafeSubmissionStatus,
-  SafeTransactionData,
-  TokenRiskReport,
   TradeProposal,
   TradeProposalStatus,
   TradeRoute,
@@ -17,6 +14,17 @@ import type {
   WalletLink
 } from "../domain/types.js";
 import type { Repository } from "./repository.js";
+import {
+  deserializeRiskReport,
+  deserializeSafeTransaction,
+  deserializeTransactions,
+  serializeRiskReport,
+  serializeSafeTransaction,
+  serializeTransactions,
+  type StoredChainTransaction,
+  type StoredSafeTransactionData,
+  type StoredTokenRiskReport
+} from "./postgresSerialization.js";
 
 type GroupWalletRow = {
   chat_id: string;
@@ -37,7 +45,7 @@ type TradeProposalRow = {
   route: TradeRoute;
   status: TradeProposalStatus;
   risk_report: StoredTokenRiskReport;
-  transactions: ChainTransaction[];
+  transactions: StoredChainTransaction[];
   created_at: Date;
 };
 
@@ -63,7 +71,7 @@ type FlapLaunchRow = {
   initial_buy_wei: string;
   recipients: VaultRecipient[];
   salt: Hex;
-  transactions: ChainTransaction[];
+  transactions: StoredChainTransaction[];
   created_at: Date;
 };
 
@@ -80,25 +88,6 @@ type SafeSubmissionRow = {
   sender_address: Address | null;
   submitted_at: Date | null;
   created_at: Date;
-};
-
-type StoredChainTransaction = Omit<ChainTransaction, "value"> & {
-  value: string;
-};
-
-type StoredSafeTransactionData = Omit<
-  SafeTransactionData,
-  "value" | "safeTxGas" | "baseGas" | "gasPrice" | "nonce"
-> & {
-  value: string;
-  safeTxGas: string;
-  baseGas: string;
-  gasPrice: string;
-  nonce: string;
-};
-
-type StoredTokenRiskReport = Omit<TokenRiskReport, "checkedAt"> & {
-  checkedAt: string;
 };
 
 export class PostgresRepository implements Repository {
@@ -188,7 +177,7 @@ export class PostgresRepository implements Repository {
       route: row.route,
       status: row.status,
       riskReport: deserializeRiskReport(row.risk_report),
-      transactions: deserializeTransactions(row.transactions as unknown as StoredChainTransaction[]),
+      transactions: deserializeTransactions(row.transactions),
       createdAt: row.created_at
     };
   }
@@ -240,7 +229,7 @@ export class PostgresRepository implements Repository {
       initialBuyWei: BigInt(row.initial_buy_wei),
       recipients: row.recipients,
       salt: row.salt,
-      transactions: deserializeTransactions(row.transactions as unknown as StoredChainTransaction[]),
+      transactions: deserializeTransactions(row.transactions),
       createdAt: row.created_at
     };
   }
@@ -326,54 +315,4 @@ export class PostgresRepository implements Repository {
       ]
     );
   }
-}
-
-function serializeTransactions(transactions: ChainTransaction[]): StoredChainTransaction[] {
-  return transactions.map((transaction) => ({
-    ...transaction,
-    value: transaction.value.toString()
-  }));
-}
-
-function deserializeTransactions(transactions: StoredChainTransaction[]): ChainTransaction[] {
-  return transactions.map((transaction) => ({
-    ...transaction,
-    value: BigInt(transaction.value)
-  }));
-}
-
-function serializeSafeTransaction(transaction: SafeTransactionData): StoredSafeTransactionData {
-  return {
-    ...transaction,
-    value: transaction.value.toString(),
-    safeTxGas: transaction.safeTxGas.toString(),
-    baseGas: transaction.baseGas.toString(),
-    gasPrice: transaction.gasPrice.toString(),
-    nonce: transaction.nonce.toString()
-  };
-}
-
-function deserializeSafeTransaction(transaction: StoredSafeTransactionData): SafeTransactionData {
-  return {
-    ...transaction,
-    value: BigInt(transaction.value),
-    safeTxGas: BigInt(transaction.safeTxGas),
-    baseGas: BigInt(transaction.baseGas),
-    gasPrice: BigInt(transaction.gasPrice),
-    nonce: BigInt(transaction.nonce)
-  };
-}
-
-function serializeRiskReport(report: TokenRiskReport): StoredTokenRiskReport {
-  return {
-    ...report,
-    checkedAt: report.checkedAt.toISOString()
-  };
-}
-
-function deserializeRiskReport(report: StoredTokenRiskReport): TokenRiskReport {
-  return {
-    ...report,
-    checkedAt: new Date(report.checkedAt)
-  };
 }

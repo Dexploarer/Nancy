@@ -11,6 +11,7 @@ import { SafeSubmissionService } from "./services/safeSubmissionService.js";
 import { WalletLinkService } from "./services/walletLinkService.js";
 import { TokenRiskService } from "./services/tokenRiskService.js";
 import { FlapMetadataService } from "./services/flapMetadataService.js";
+import { SafeDeploymentService } from "./services/safeDeploymentService.js";
 import { MemoryRepository } from "./storage/memoryRepository.js";
 import { PostgresRepository } from "./storage/postgresRepository.js";
 import type { Repository } from "./storage/repository.js";
@@ -21,6 +22,7 @@ export type App = {
   bot: Bot;
   repository: Repository;
   safeSubmissionService: SafeSubmissionService;
+  safeDeploymentService: SafeDeploymentService;
   walletLinkService: WalletLinkService;
   flapMetadataService: FlapMetadataService;
 };
@@ -40,6 +42,12 @@ export function buildApp(config: AppConfig): App {
   );
   const groupWalletService = new GroupWalletService(repository);
   const walletLinkService = new WalletLinkService(repository);
+  const safeDeploymentService = new SafeDeploymentService(
+    addresses,
+    config.bscRpcUrl,
+    config.bscChainId,
+    config.safeExecutorPrivateKey
+  );
   const tokenRiskService = new TokenRiskService({
     mode: config.riskCheckMode,
     minLiquidityUsd: config.minLiquidityUsd,
@@ -57,6 +65,7 @@ export function buildApp(config: AppConfig): App {
     tradeService,
     flapLaunchService,
     flapMetadataService,
+    safeDeploymentService,
     safeSubmissionService,
     config
   });
@@ -64,6 +73,7 @@ export function buildApp(config: AppConfig): App {
     bot,
     repository,
     safeSubmissionService,
+    safeDeploymentService,
     walletLinkService,
     flapMetadataService
   };

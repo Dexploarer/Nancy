@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import type { Address } from "viem";
 import { TradeService } from "../src/services/tradeService.js";
 import { MemoryRepository } from "../src/storage/memoryRepository.js";

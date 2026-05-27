@@ -1,0 +1,137 @@
+import { randomBytes } from "node:crypto";
+import {
+  createPublicClient,
+  createWalletClient,
+  encodeFunctionData,
+  http,
+  parseEventLogs,
+  type Address,
+  type Hex,
+  type PublicClient
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { bsc, bscTestnet } from "viem/chains";
+import { safeAbi, safeProxyFactoryAbi } from "../chain/abis.js";
+import { type BscContractAddresses, NATIVE_TOKEN_ADDRESS } from "../chain/addresses.js";
+import { AppError, UserInputError } from "../domain/errors.js";
+import type { ChainTransaction } from "../domain/types.js";
+
+export type CreateSafeInput = {
+  owners: Address[];
+  threshold: number;
+};
+
+export type SafeDeployment = {
+  safeAddress: Address;
+  transactionHash: Hex;
+  threshold: number;
+  owners: Address[];
+};
+
+export class SafeDeploymentService {
+  readonly publicClient: PublicClient;
+  private readonly chain;
+  private readonly walletClient?: ReturnType<typeof createWalletClient>;
+  private readonly executorAccount?: ReturnType<typeof privateKeyToAccount>;
+
+  constructor(
+    private readonly addresses: BscContractAddresses,
+    rpcUrl: string,
+    chainId: 56 | 97,
+    executorPrivateKey?: Hex
+  ) {
+    this.chain = chainId === 56 ? bsc : bscTestnet;
+    this.publicClient = createPublicClient({
+      chain: this.chain,
+      transport: http(rpcUrl)
+    });
+    if (executorPrivateKey !== undefined) {
+      this.executorAccount = privateKeyToAccount(executorPrivateKey);
+      this.walletClient = createWalletClient({
+        account: this.executorAccount,
+        chain: this.chain,
+        transport: http(rpcUrl)
+      });
+    }
+  }
+
+  async createSafe(input: CreateSafeInput): Promise<SafeDeployment> {
+    if (this.walletClient === undefined || this.executorAccount === undefined) {
+      throw new UserInputError("SAFE_EXECUTOR_PRIVATE_KEY is required to create a Safe from Telegram");
+    }
+    const transaction = this.buildDeploymentTransaction(input.owners, input.threshold, createSaltNonce());
+    const transactionHash = await this.walletClient.writeContract({
+      address: this.addresses.safeProxyFactory,
+      abi: safeProxyFactoryAbi,
+      functionName: "createProxyWithNonce",
+      account: this.executorAccount,
+      chain: this.chain,
+      args: [this.addresses.safeSingleton, buildSafeInitializer(this.addresses.safeFallbackHandler, input.owners, input.threshold), transaction.saltNonce]
+    });
+    const receipt = await this.publicClient.waitForTransactionReceipt({ hash: transactionHash });
+    const events = parseEventLogs({
+      abi: safeProxyFactoryAbi,
+      eventName: "ProxyCreation",
+      logs: receipt.logs
+    });
+    const event = events.find((item) => item.address.toLowerCase() === this.addresses.safeProxyFactory.toLowerCase());
+    if (event === undefined) {
+      throw new AppError("Safe deployment transaction did not emit ProxyCreation", { transactionHash });
+    }
+    return {
+      safeAddress: event.args.proxy,
+      transactionHash,
+      threshold: input.threshold,
+      owners: input.owners
+    };
+  }
+
+  buildDeploymentTransaction(owners: Address[], threshold: number, saltNonce: bigint): ChainTransaction & { saltNonce: bigint } {
+    assertSafeOwners(owners, threshold);
+    const initializer = buildSafeInitializer(this.addresses.safeFallbackHandler, owners, threshold);
+    return {
+      to: this.addresses.safeProxyFactory,
+      value: 0n,
+      label: "Safe proxy deployment",
+      data: encodeFunctionData({
+        abi: safeProxyFactoryAbi,
+        functionName: "createProxyWithNonce",
+        args: [this.addresses.safeSingleton, initializer, saltNonce]
+      }),
+      saltNonce
+    };
+  }
+}
+
+export function buildSafeInitializer(fallbackHandler: Address, owners: Address[], threshold: number): Hex {
+  assertSafeOwners(owners, threshold);
+  return encodeFunctionData({
+    abi: safeAbi,
+    functionName: "setup",
+    args: [owners, BigInt(threshold), NATIVE_TOKEN_ADDRESS, "0x", fallbackHandler, NATIVE_TOKEN_ADDRESS, 0n, NATIVE_TOKEN_ADDRESS]
+  });
+}
+
+function assertSafeOwners(owners: Address[], threshold: number): void {
+  if (owners.length === 0) {
+    throw new UserInputError("Safe requires at least one owner");
+  }
+  if (!Number.isInteger(threshold) || threshold <= 0 || threshold > owners.length) {
+    throw new UserInputError("Safe threshold must be between 1 and owner count", { threshold, owners: owners.length });
+  }
+  const uniqueOwners = new Set<string>();
+  for (const owner of owners) {
+    const normalized = owner.toLowerCase();
+    if (owner === NATIVE_TOKEN_ADDRESS) {
+      throw new UserInputError("Safe owner cannot be the zero address");
+    }
+    if (uniqueOwners.has(normalized)) {
+      throw new UserInputError("Safe owners must be unique", { owner });
+    }
+    uniqueOwners.add(normalized);
+  }
+}
+
+function createSaltNonce(): bigint {
+  return BigInt(`0x${randomBytes(32).toString("hex")}`);
+}

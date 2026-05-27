@@ -1,15 +1,7 @@
 import {
-  concatHex,
   createPublicClient,
   createWalletClient,
-  encodeFunctionData,
-  hexToNumber,
   http,
-  isHex,
-  numberToHex,
-  padHex,
-  recoverMessageAddress,
-  size,
   type Address,
   type Hex,
   type PublicClient
@@ -18,8 +10,13 @@ import { privateKeyToAccount } from "viem/accounts";
 import { bsc, bscTestnet } from "viem/chains";
 import { AppError, UserInputError } from "../domain/errors.js";
 import type { ChainTransaction, SafeTransactionData } from "../domain/types.js";
-import { safeAbi, multiSendAbi } from "./abis.js";
-import { type BscContractAddresses, NATIVE_TOKEN_ADDRESS } from "./addresses.js";
+import { safeAbi } from "./abis.js";
+import type { BscContractAddresses } from "./addresses.js";
+import { buildSignatureBytes, normalizeOwnerSignature, type SafeConfirmation } from "./safeSignatures.js";
+import { buildSafeTransactionData } from "./safeTransactions.js";
+
+export { buildSignatureBytes, normalizeOwnerSignature } from "./safeSignatures.js";
+export { encodeMultiSendTransactions } from "./safeTransactions.js";
 
 type ProposeTransactionInput = {
   serviceUrl: string;
@@ -40,14 +37,11 @@ type SafeConfigResponse = {
   transactionService?: string;
 };
 
-export type SafeConfirmation = {
-  owner: Address;
-  signature: Hex;
-};
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
-type SafeTransactionServiceResponse = {
+export type SafeTransactionServiceStatus = {
   confirmations?: SafeConfirmation[];
-};
+} & { [key: string]: JsonValue | SafeConfirmation[] | undefined };
 
 export class SafeService {
   readonly publicClient: PublicClient;
@@ -135,8 +129,8 @@ export class SafeService {
     });
   }
 
-  async getTransaction(serviceUrl: string, safeTxHash: Hex): Promise<unknown> {
-    return this.requestJson(`${trimTrailingSlash(serviceUrl)}/api/v1/multisig-transactions/${safeTxHash}/`, {
+  async getTransaction(serviceUrl: string, safeTxHash: Hex): Promise<SafeTransactionServiceStatus> {
+    return this.requestJson<SafeTransactionServiceStatus>(`${trimTrailingSlash(serviceUrl)}/api/v1/multisig-transactions/${safeTxHash}/`, {
       method: "GET"
     });
   }
@@ -176,41 +170,7 @@ export class SafeService {
     nonce: bigint,
     multiSendCallOnlyAddress: Address
   ): SafeTransactionData {
-    if (transactions.length === 0) {
-      throw new UserInputError("Safe submission requires at least one transaction");
-    }
-    const base = {
-      safeTxGas: 0n,
-      baseGas: 0n,
-      gasPrice: 0n,
-      gasToken: NATIVE_TOKEN_ADDRESS,
-      refundReceiver: NATIVE_TOKEN_ADDRESS,
-      nonce
-    };
-    if (transactions.length === 1) {
-      const transaction = transactions[0];
-      if (transaction === undefined) {
-        throw new UserInputError("Safe submission requires at least one transaction");
-      }
-      return {
-        ...base,
-        to: transaction.to,
-        value: transaction.value,
-        data: transaction.data,
-        operation: 0
-      };
-    }
-    return {
-      ...base,
-      to: multiSendCallOnlyAddress,
-      value: 0n,
-      operation: 1,
-      data: encodeFunctionData({
-        abi: multiSendAbi,
-        functionName: "multiSend",
-        args: [encodeMultiSendTransactions(transactions)]
-      })
-    };
+    return buildSafeTransactionData(transactions, nonce, multiSendCallOnlyAddress);
   }
 
   private async getSafeTransactionHash(safeAddress: Address, transaction: SafeTransactionData): Promise<Hex> {
@@ -253,7 +213,7 @@ export class SafeService {
     return config.transactionService;
   }
 
-  private async requestJson(url: string, init: RequestInit): Promise<unknown> {
+  private async requestJson<T>(url: string, init: RequestInit): Promise<T> {
     const response = await fetch(url, {
       ...init,
       headers: {
@@ -264,104 +224,19 @@ export class SafeService {
       }
     });
     const text = await response.text();
-    const payload = text.length === 0 ? null : JSON.parse(text);
+    const payload = text.length === 0 ? null : (JSON.parse(text) as JsonValue);
     if (!response.ok) {
       throw new AppError("Safe Transaction Service request failed", {
         status: response.status,
         url
       });
     }
-    return payload;
+    return payload as T;
   }
 }
 
-export function extractConfirmations(status: unknown): SafeConfirmation[] {
-  const response = status as SafeTransactionServiceResponse;
-  return response.confirmations ?? [];
-}
-
-export function buildSignatureBytes(confirmations: SafeConfirmation[]): Hex {
-  if (confirmations.length === 0) {
-    throw new UserInputError("Safe transaction has no confirmations");
-  }
-  const uniqueConfirmations = new Map<string, SafeConfirmation>();
-  for (const confirmation of confirmations) {
-    uniqueConfirmations.set(confirmation.owner.toLowerCase(), confirmation);
-  }
-  return concatHex(
-    [...uniqueConfirmations.values()]
-      .sort((left, right) => left.owner.toLowerCase().localeCompare(right.owner.toLowerCase()))
-      .map((confirmation) => confirmation.signature)
-  );
-}
-
-export function encodeMultiSendTransactions(transactions: ChainTransaction[]): Hex {
-  return concatHex(
-    transactions.map((transaction) =>
-      concatHex([
-        "0x00",
-        transaction.to,
-        padHex(numberToHex(transaction.value), { size: 32 }),
-        padHex(numberToHex(size(transaction.data)), { size: 32 }),
-        transaction.data
-      ])
-    )
-  );
-}
-
-export async function normalizeOwnerSignature(safeTxHash: Hex, ownerAddress: Address, signature: Hex): Promise<Hex> {
-  if (!isHex(signature) || size(signature) !== 65) {
-    throw new UserInputError("Signature must be a 65-byte hex value");
-  }
-  const safeAdjustedSignature = toSafeAdjustedEthSignSignature(signature);
-  const personalSignSignature = toPersonalSignSignature(signature);
-  const recovered = await recoverMessageAddress({
-    message: { raw: safeTxHash },
-    signature: personalSignSignature
-  });
-  if (recovered.toLowerCase() !== ownerAddress.toLowerCase()) {
-    throw new UserInputError("Signature does not recover to the provided Safe owner", {
-      ownerAddress,
-      recovered
-    });
-  }
-  return safeAdjustedSignature;
-}
-
-function toSafeAdjustedEthSignSignature(signature: Hex): Hex {
-  const v = signatureV(signature);
-  if (v === 31 || v === 32) {
-    return signature;
-  }
-  if (v === 27 || v === 28) {
-    return replaceSignatureV(signature, v + 4);
-  }
-  if (v === 0 || v === 1) {
-    return replaceSignatureV(signature, v + 31);
-  }
-  throw new UserInputError("Unsupported signature recovery byte", { v });
-}
-
-function toPersonalSignSignature(signature: Hex): Hex {
-  const v = signatureV(signature);
-  if (v === 31 || v === 32) {
-    return replaceSignatureV(signature, v - 4);
-  }
-  if (v === 27 || v === 28) {
-    return signature;
-  }
-  if (v === 0 || v === 1) {
-    return replaceSignatureV(signature, v + 27);
-  }
-  throw new UserInputError("Unsupported signature recovery byte", { v });
-}
-
-function signatureV(signature: Hex): number {
-  return hexToNumber(`0x${signature.slice(-2)}`);
-}
-
-function replaceSignatureV(signature: Hex, v: number): Hex {
-  return `${signature.slice(0, -2)}${numberToHex(v, { size: 1 }).slice(2)}` as Hex;
+export function extractConfirmations(status: SafeTransactionServiceStatus): SafeConfirmation[] {
+  return status.confirmations ?? [];
 }
 
 function trimTrailingSlash(value: string): string {

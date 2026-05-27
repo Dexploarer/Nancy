@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
 import type { Address, Hex } from "viem";
 import { MemoryRepository } from "../src/storage/memoryRepository.js";
 import { SafeSubmissionService } from "../src/services/safeSubmissionService.js";
@@ -29,10 +29,10 @@ class FakeSafeService {
     };
   }
 
-  normalizeOwnerSignature = vi.fn(async (_hash: Hex, _owner: Address, signature: Hex) => signature);
-  proposeTransaction = vi.fn(async () => undefined);
-  confirmTransaction = vi.fn(async () => undefined);
-  getTransaction = vi.fn(async () => ({ confirmations: [] }));
+  normalizeOwnerSignature = mock(async (_hash: Hex, _owner: Address, signature: Hex) => signature);
+  proposeTransaction = mock(async () => undefined);
+  confirmTransaction = mock(async () => undefined);
+  getTransaction = mock(async () => ({ confirmations: [] }));
 }
 
 describe("SafeSubmissionService", () => {
@@ -94,6 +94,6 @@ describe("SafeSubmissionService", () => {
     );
 
     expect(submitted.status).toBe("submitted");
-    expect(fakeSafeService.proposeTransaction).toHaveBeenCalledOnce();
+    expect(fakeSafeService.proposeTransaction).toHaveBeenCalledTimes(1);
   });
 });

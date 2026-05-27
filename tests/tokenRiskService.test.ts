@@ -1,34 +1,43 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 import { TokenRiskService } from "../src/services/tokenRiskService.js";
 
+type JsonBody = string | number | boolean | null | JsonBody[] | { [key: string]: JsonBody };
+
 describe("TokenRiskService", () => {
+  const originalFetch = globalThis.fetch;
+
   afterEach(() => {
-    vi.restoreAllMocks();
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: originalFetch
+    });
   });
 
   it("blocks tokens when risk mode is block and provider checks return high-risk signals", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (url.includes("dexscreener")) {
-          return response([
-            {
-              url: "https://dexscreener.com/bsc/pair",
-              liquidity: { usd: 100 }
-            }
-          ]);
-        }
-        return response({
-          result: {
-            "0x1111111111111111111111111111111111111111": {
-              is_honeypot: "1",
-              buy_tax: "0.20",
-              sell_tax: "0.25"
-            }
+    const fakeFetch = async (input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.includes("dexscreener")) {
+        return response([
+          {
+            url: "https://dexscreener.com/bsc/pair",
+            liquidity: { usd: 100 }
           }
-        });
-      })
-    );
+        ]);
+      }
+      return response({
+        result: {
+          "0x1111111111111111111111111111111111111111": {
+            is_honeypot: "1",
+            buy_tax: "0.20",
+            sell_tax: "0.25"
+          }
+        }
+      });
+    };
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: fakeFetch
+    });
     const service = new TokenRiskService({
       mode: "block",
       minLiquidityUsd: 1000,
@@ -44,7 +53,7 @@ describe("TokenRiskService", () => {
   });
 });
 
-function response(body: unknown): Response {
+function response(body: JsonBody): Response {
   return {
     ok: true,
     json: async () => body
