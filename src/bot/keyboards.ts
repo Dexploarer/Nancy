@@ -7,7 +7,9 @@ export function mainMenuKeyboard(): InlineKeyboard {
     .text("Link wallet", "help:link")
     .row()
     .text("Buy token", "help:buy")
-    .text("Launch Flap", "help:flap");
+    .text("Launch Flap", "help:flap")
+    .row()
+    .text("Pool analytics", "help:pool");
 }
 
 export function safeGroupKeyboard(session: SafeCreationSession): InlineKeyboard {
@@ -24,6 +26,11 @@ export function safeGroupKeyboard(session: SafeCreationSession): InlineKeyboard 
 
 export function safeSubmissionKeyboard(submissionId: string): InlineKeyboard {
   return new InlineKeyboard().text("Approve with managed wallet", `safe_approve:${submissionId}`);
+}
+
+export function poolAppKeyboard(chatId: string, publicBaseUrl?: string): InlineKeyboard {
+  const url = `${publicBaseUrl?.replace(/\/$/, "") ?? "http://localhost:3000"}/pool/${encodeURIComponent(chatId)}`;
+  return new InlineKeyboard().webApp("Open analytics", url).url("Open in browser", url);
 }
 
 export function helpText(topic: string): string {
@@ -47,6 +54,16 @@ export function helpText(topic: string): string {
       "Flap launch",
       "/flap_metadata is optional when using Pinata.",
       "/flap_launch <name>|<symbol>|<metadataUri>|<buyTaxBps>|<sellTaxBps>|<taxDays>|<recipient:bps,...>|<initialBuyBnb>"
+    ].join("\n");
+  }
+  if (topic === "pool") {
+    return [
+      "Pool",
+      "/pool_init",
+      "/pool_nav <navBnb> <liquidBnb> <positionsBnb>",
+      "/pool_role <telegramUserId> <owner|trader|member>",
+      "/pool_deposit <bnbAmount> <txHash>",
+      "/pool_withdraw <basisPoints> <recipientAddress>"
     ].join("\n");
   }
   return "Unknown help topic";

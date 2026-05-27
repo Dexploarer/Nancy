@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { safeGroupKeyboard } from "../src/bot/keyboards.js";
+import { poolAppKeyboard, safeGroupKeyboard } from "../src/bot/keyboards.js";
 
 describe("safeGroupKeyboard", () => {
   it("shows deploy only when enough owners joined", () => {
@@ -20,5 +20,13 @@ describe("safeGroupKeyboard", () => {
     });
 
     expect(JSON.stringify(keyboard.inline_keyboard)).toContain("safe_deploy:setup_123");
+  });
+});
+
+describe("poolAppKeyboard", () => {
+  it("opens the Telegram mini app analytics route", () => {
+    const keyboard = poolAppKeyboard("-100123", "http://localhost:3000");
+
+    expect(JSON.stringify(keyboard.inline_keyboard)).toContain("http://localhost:3000/pool/-100123");
   });
 });

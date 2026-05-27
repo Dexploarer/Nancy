@@ -82,3 +82,71 @@ create table if not exists safe_submissions (
   submitted_at timestamptz,
   created_at timestamptz not null
 );
+
+create table if not exists pool_members (
+  chat_id text not null references group_wallets(chat_id),
+  telegram_user_id text not null,
+  role text not null,
+  shares text not null,
+  deposited_wei text not null,
+  withdrawn_wei text not null,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  primary key (chat_id, telegram_user_id)
+);
+
+create table if not exists pool_nav_snapshots (
+  id text primary key,
+  chat_id text not null references group_wallets(chat_id),
+  nav_wei text not null,
+  liquid_wei text not null,
+  positions_wei text not null,
+  total_shares text not null,
+  captured_at timestamptz not null
+);
+
+create index if not exists pool_nav_snapshots_chat_captured_at_idx
+  on pool_nav_snapshots(chat_id, captured_at desc);
+
+create table if not exists pool_ledger_entries (
+  id text primary key,
+  chat_id text not null references group_wallets(chat_id),
+  telegram_user_id text not null,
+  type text not null,
+  amount_wei text not null,
+  shares_delta text not null,
+  nav_wei text not null,
+  total_shares_after text not null,
+  transaction_hash text,
+  created_at timestamptz not null
+);
+
+create unique index if not exists pool_ledger_entries_transaction_hash_idx
+  on pool_ledger_entries(lower(transaction_hash))
+  where transaction_hash is not null;
+
+create index if not exists pool_ledger_entries_chat_created_at_idx
+  on pool_ledger_entries(chat_id, created_at desc);
+
+create table if not exists pool_withdrawal_requests (
+  id text primary key,
+  chat_id text not null references group_wallets(chat_id),
+  telegram_user_id text not null,
+  recipient_address text not null,
+  shares text not null,
+  gross_amount_wei text not null,
+  fee_amount_wei text not null,
+  net_amount_wei text not null,
+  nav_wei text not null,
+  total_shares_at_request text not null,
+  status text not null,
+  requested_at timestamptz not null,
+  prepared_at timestamptz,
+  executed_at timestamptz,
+  cancelled_at timestamptz,
+  safe_submission_id text references safe_submissions(id),
+  execution_transaction_hash text
+);
+
+create index if not exists pool_withdrawal_requests_chat_status_idx
+  on pool_withdrawal_requests(chat_id, status, requested_at desc);

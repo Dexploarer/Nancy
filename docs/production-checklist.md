@@ -7,6 +7,7 @@
 - Safe Transaction Service access for BNB Chain.
 - Postgres database.
 - Public HTTPS base URL for Telegram webhooks and signing pages.
+- Public HTTPS base URL for Telegram Mini Apps.
 - Optional Pinata JWT when using `/flap_metadata` instead of supplying an existing metadata URI.
 
 ## Required environment
@@ -19,6 +20,7 @@ BSC_CHAIN_ID=56
 BSC_RPC_URL=...
 PLATFORM_FEE_RECIPIENT=...
 PLATFORM_COMMISSION_RECEIVER=...
+POOL_WITHDRAWAL_FEE_BPS=25
 DATABASE_URL=...
 PUBLIC_BASE_URL=https://...
 TELEGRAM_WEBHOOK_SECRET=<random-32-byte-string>
@@ -43,7 +45,8 @@ WALLET_ENCRYPTION_KEY=<32-byte-hex-key>
 8. Add the bot to a Telegram group and keep privacy mode compatible with slash commands.
 9. Generate bot-managed owner wallets with `/wallet_generate` or link external owners with `/link_start` and `/link_submit`.
 10. Use `/safe_group <threshold>`, have owners tap `Generate + join` or `Join linked wallet`, then deploy from the inline button.
-11. Create a small test proposal, prepare it, approve with a managed wallet button or sign from `/sign/<safeSubmissionId>`, and verify it appears in Safe Wallet before funding the Safe materially.
+11. Run `/pool_init`, assign one trader with `/pool_role`, verify a real BNB deposit with `/pool_deposit`, and open `/pool` from Telegram.
+12. Create a small test proposal, prepare it, approve with a managed wallet button or sign from `/sign/<safeSubmissionId>`, and verify it appears in Safe Wallet before funding the Safe materially.
 
 ## Mainnet release gates
 
@@ -57,3 +60,6 @@ WALLET_ENCRYPTION_KEY=<32-byte-hex-key>
 - Confirm a non-linked Telegram user cannot submit a Safe owner signature.
 - Confirm generated wallet private keys are delivered only by DM and managed approval recovers to the Safe owner address.
 - Confirm `/safe_group` only accepts linked wallets and the deploy receipt contains the expected `ProxyCreation` event.
+- Confirm `/pool_deposit` rejects a reused transaction hash, a sender that is not linked to the Telegram user, and a transfer that did not go to the Safe.
+- Confirm `/pool_withdraw` locks shares, reserves the gross claim, applies the configured withdrawal fee, and `/safe_prepare withdrawal <id>` produces the Safe payout batch.
+- Confirm `/pool` opens as a Telegram Mini App over HTTPS and rejects analytics API calls without valid Telegram Web App init data in production.

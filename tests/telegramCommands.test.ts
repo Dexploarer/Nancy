@@ -8,6 +8,9 @@ describe("BOT_COMMANDS", () => {
     expect(commands).toContain("safe_group");
     expect(commands).toContain("safe_group_join");
     expect(commands).toContain("safe_create");
+    expect(commands).toContain("pool_init");
+    expect(commands).toContain("pool_deposit");
+    expect(commands).toContain("pool_withdraw");
     expect(commands).toContain("buy");
     expect(commands).toContain("flap_launch");
   });

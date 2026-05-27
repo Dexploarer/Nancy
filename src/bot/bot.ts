@@ -25,9 +25,12 @@ import { FlapMetadataService } from "../services/flapMetadataService.js";
 import { SafeDeploymentService } from "../services/safeDeploymentService.js";
 import { SafeGroupSetupService } from "../services/safeGroupSetupService.js";
 import { ManagedWalletService } from "../services/managedWalletService.js";
+import { PoolService } from "../services/poolService.js";
+import { DepositVerificationService } from "../services/depositVerificationService.js";
 import { BOT_COMMANDS } from "./telegramCommands.js";
 import { helpText, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
 import { registerSafeCallbacks } from "./safeCallbacks.js";
+import { registerPoolCommands } from "./poolCommands.js";
 import {
   emptyToUndefined,
   parsePositiveInteger,
@@ -49,6 +52,8 @@ export type BotDependencies = {
   safeSubmissionService: SafeSubmissionService;
   safeDeploymentService: SafeDeploymentService;
   safeGroupSetupService: SafeGroupSetupService;
+  poolService: PoolService;
+  depositVerificationService: DepositVerificationService;
   config: AppConfig;
 };
 
@@ -185,6 +190,7 @@ export function createBot(dependencies: BotDependencies): Bot {
     await handleUserCommand(ctx, async () => {
       const chatId = requireChatId(ctx.chat?.id);
       const fromId = requireTelegramUserId(ctx.from?.id);
+      await dependencies.poolService.requireTraderAccess(chatId, fromId);
       const parts = splitCommand(ctx.message?.text, 3);
       const tokenAddress = parseAddress(requiredPart(parts, 1));
       const amountWei = parseBnbAmount(requiredPart(parts, 2));
@@ -287,9 +293,11 @@ export function createBot(dependencies: BotDependencies): Bot {
           ? await dependencies.safeSubmissionService.prepareTradeSubmission(chatId, sourceId)
           : sourceType === "flap"
             ? await dependencies.safeSubmissionService.prepareFlapLaunchSubmission(chatId, sourceId)
-            : null;
+            : sourceType === "withdrawal"
+              ? await dependencies.safeSubmissionService.prepareWithdrawalSubmission(chatId, sourceId)
+              : null;
       if (submission === null) {
-        throw new UserInputError("safe_prepare source must be trade or flap");
+        throw new UserInputError("safe_prepare source must be trade, flap, or withdrawal");
       }
       await ctx.reply(formatSafeSubmission(submission, dependencies.config.publicBaseUrl), {
         reply_markup: safeSubmissionKeyboard(submission.id)
@@ -338,6 +346,7 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   registerSafeCallbacks(bot, dependencies);
+  registerPoolCommands(bot, dependencies);
 
   bot.on("callback_query:data", async (ctx) => {
     await ctx.answerCallbackQuery();

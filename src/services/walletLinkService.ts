@@ -50,6 +50,10 @@ export class WalletLinkService {
       throw new UserInputError("Link this owner wallet before using it for Safe signatures");
     }
   }
+
+  async getLinkedWallets(telegramUserId: string): Promise<WalletLink[]> {
+    return this.repository.getLinkedWalletsByTelegramUserId(telegramUserId);
+  }
 }
 
 export function buildWalletLinkMessage(link: WalletLink): string {

@@ -15,9 +15,14 @@ import { SafeDeploymentService } from "./services/safeDeploymentService.js";
 import { SafeGroupSetupService } from "./services/safeGroupSetupService.js";
 import { WalletEncryptionService } from "./services/walletEncryptionService.js";
 import { ManagedWalletService } from "./services/managedWalletService.js";
+import { PoolService } from "./services/poolService.js";
+import { DepositVerificationService } from "./services/depositVerificationService.js";
 import { MemoryRepository } from "./storage/memoryRepository.js";
+import { MemoryPoolRepository } from "./storage/memoryPoolRepository.js";
 import { PostgresRepository } from "./storage/postgresRepository.js";
+import { PostgresPoolRepository } from "./storage/postgresPoolRepository.js";
 import type { Repository } from "./storage/repository.js";
+import type { PoolRepository } from "./storage/poolRepository.js";
 import { AppError } from "./domain/errors.js";
 import type { Bot } from "grammy";
 
@@ -28,12 +33,15 @@ export type App = {
   safeDeploymentService: SafeDeploymentService;
   safeGroupSetupService: SafeGroupSetupService;
   managedWalletService: ManagedWalletService;
+  poolService: PoolService;
+  depositVerificationService: DepositVerificationService;
   walletLinkService: WalletLinkService;
   flapMetadataService: FlapMetadataService;
 };
 
 export function buildApp(config: AppConfig): App {
   const repository = createRepository(config);
+  const poolRepository = createPoolRepository(config);
   const addresses = getBscContractAddresses(config.bscChainId);
   const flapService = new FlapService(addresses, config.bscRpcUrl, config.bscChainId);
   const pancakeSwapService = new PancakeSwapService(addresses, config.bscRpcUrl, config.bscChainId);
@@ -49,6 +57,8 @@ export function buildApp(config: AppConfig): App {
   const walletLinkService = new WalletLinkService(repository);
   const walletEncryptionService = new WalletEncryptionService(config.walletEncryptionKey);
   const managedWalletService = new ManagedWalletService(repository, walletEncryptionService);
+  const poolService = new PoolService(repository, poolRepository, config.poolWithdrawalFeeBps);
+  const depositVerificationService = new DepositVerificationService(config.bscRpcUrl, config.bscChainId);
   const safeDeploymentService = new SafeDeploymentService(
     addresses,
     config.bscRpcUrl,
@@ -65,7 +75,13 @@ export function buildApp(config: AppConfig): App {
   const tradeService = new TradeService(repository, flapService, pancakeSwapService, tokenRiskService);
   const flapLaunchService = new FlapLaunchService(repository, flapService);
   const flapMetadataService = new FlapMetadataService(config.pinataJwt);
-  const safeSubmissionService = new SafeSubmissionService(repository, safeService, walletLinkService);
+  const safeSubmissionService = new SafeSubmissionService(
+    repository,
+    safeService,
+    walletLinkService,
+    poolService,
+    config.platformFeeRecipient
+  );
   const bot = createBot({
     repository,
     groupWalletService,
@@ -76,6 +92,8 @@ export function buildApp(config: AppConfig): App {
     flapMetadataService,
     safeDeploymentService,
     safeGroupSetupService,
+    poolService,
+    depositVerificationService,
     safeSubmissionService,
     config
   });
@@ -86,6 +104,8 @@ export function buildApp(config: AppConfig): App {
     safeDeploymentService,
     safeGroupSetupService,
     managedWalletService,
+    poolService,
+    depositVerificationService,
     walletLinkService,
     flapMetadataService
   };
@@ -99,4 +119,14 @@ function createRepository(config: AppConfig): Repository {
     throw new AppError("DATABASE_URL is required when STORAGE_DRIVER=postgres");
   }
   return new PostgresRepository(config.databaseUrl);
+}
+
+function createPoolRepository(config: AppConfig): PoolRepository {
+  if (config.storageDriver === "memory") {
+    return new MemoryPoolRepository();
+  }
+  if (config.databaseUrl === undefined) {
+    throw new AppError("DATABASE_URL is required when STORAGE_DRIVER=postgres");
+  }
+  return new PostgresPoolRepository(config.databaseUrl);
 }

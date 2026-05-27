@@ -40,7 +40,13 @@ describe("SafeSubmissionService", () => {
     const repository = new MemoryRepository();
     const fakeSafeService = new FakeSafeService();
     const walletLinkService = new WalletLinkService(repository);
-    const service = new SafeSubmissionService(repository, fakeSafeService as never, walletLinkService);
+    const service = new SafeSubmissionService(
+      repository,
+      fakeSafeService as never,
+      walletLinkService,
+      {} as never,
+      "0x0000000000000000000000000000000000000000"
+    );
     const linkedAt = new Date("2026-05-27T00:01:00.000Z");
     await repository.saveWalletLink({
       telegramUserId: "456",

@@ -13,6 +13,7 @@ const EnvSchema = z
     PLATFORM_FEE_RECIPIENT: z.string().min(1),
     PLATFORM_COMMISSION_RECEIVER: z.string().min(1),
     TRADE_FEE_BPS: z.coerce.number().int().min(0).max(100),
+    POOL_WITHDRAWAL_FEE_BPS: z.coerce.number().int().min(0).max(100).default(25),
     DATABASE_URL: z.string().url().optional(),
     SAFE_TRANSACTION_SERVICE_URL: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
     SAFE_API_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional()),
@@ -47,6 +48,7 @@ export type AppConfig = {
   platformFeeRecipient: ReturnType<typeof parseAddress>;
   platformCommissionReceiver: ReturnType<typeof parseAddress>;
   tradeFeeBps: number;
+  poolWithdrawalFeeBps: number;
   databaseUrl?: string;
   safeTransactionServiceUrl?: string;
   safeApiKey?: string;
@@ -74,6 +76,7 @@ export function loadConfig(): AppConfig {
     platformFeeRecipient: parseAddress(env.PLATFORM_FEE_RECIPIENT),
     platformCommissionReceiver: parseAddress(env.PLATFORM_COMMISSION_RECEIVER),
     tradeFeeBps: env.TRADE_FEE_BPS,
+    poolWithdrawalFeeBps: env.POOL_WITHDRAWAL_FEE_BPS,
     ...(env.DATABASE_URL === undefined ? {} : { databaseUrl: env.DATABASE_URL }),
     ...(env.SAFE_TRANSACTION_SERVICE_URL === undefined ? {} : { safeTransactionServiceUrl: env.SAFE_TRANSACTION_SERVICE_URL }),
     ...(env.SAFE_API_KEY === undefined ? {} : { safeApiKey: env.SAFE_API_KEY }),

@@ -132,7 +132,7 @@ export type FlapLaunchProposal = {
   createdAt: Date;
 };
 
-export type SafeSubmissionSourceType = "trade" | "flap-launch";
+export type SafeSubmissionSourceType = "trade" | "flap-launch" | "withdrawal";
 
 export type SafeSubmissionStatus = "prepared" | "submitted";
 
@@ -149,4 +149,94 @@ export type SafeSubmission = {
   senderAddress?: Address;
   submittedAt?: Date;
   createdAt: Date;
+};
+
+export type PoolRole = "owner" | "trader" | "member";
+
+export type PoolMember = {
+  chatId: ChatId;
+  telegramUserId: string;
+  role: PoolRole;
+  shares: bigint;
+  depositedWei: bigint;
+  withdrawnWei: bigint;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type PoolLedgerEntryType = "deposit" | "withdrawal-request" | "withdrawal-execution" | "nav-update" | "role-update";
+
+export type PoolLedgerEntry = {
+  id: string;
+  chatId: ChatId;
+  telegramUserId: string;
+  type: PoolLedgerEntryType;
+  amountWei: bigint;
+  sharesDelta: bigint;
+  navWei: bigint;
+  totalSharesAfter: bigint;
+  createdAt: Date;
+  transactionHash?: Hex;
+};
+
+export type PoolNavSnapshot = {
+  id: string;
+  chatId: ChatId;
+  navWei: bigint;
+  liquidWei: bigint;
+  positionsWei: bigint;
+  totalShares: bigint;
+  capturedAt: Date;
+};
+
+export type PoolWithdrawalStatus = "queued" | "prepared" | "executed" | "cancelled";
+
+export type PoolWithdrawalRequest = {
+  id: string;
+  chatId: ChatId;
+  telegramUserId: string;
+  recipientAddress: Address;
+  shares: bigint;
+  grossAmountWei: bigint;
+  feeAmountWei: bigint;
+  netAmountWei: bigint;
+  navWei: bigint;
+  totalSharesAtRequest: bigint;
+  status: PoolWithdrawalStatus;
+  requestedAt: Date;
+  preparedAt?: Date;
+  executedAt?: Date;
+  cancelledAt?: Date;
+  safeSubmissionId?: string;
+  executionTransactionHash?: Hex;
+};
+
+export type PoolMemberBreakdown = {
+  telegramUserId: string;
+  role: PoolRole;
+  shares: bigint;
+  ownershipBps: number;
+  activeValueWei: bigint;
+  depositedWei: bigint;
+  withdrawnWei: bigint;
+  queuedWithdrawalWei: bigint;
+  unrealizedPnlWei: bigint;
+};
+
+export type PoolAnalytics = {
+  chatId: ChatId;
+  telegramUserId: string;
+  safeAddress?: Address;
+  navWei: bigint;
+  liquidWei: bigint;
+  positionsWei: bigint;
+  activeNavWei: bigint;
+  reservedWithdrawalWei: bigint;
+  totalShares: bigint;
+  withdrawalFeeBps: number;
+  member: PoolMemberBreakdown;
+  members: PoolMemberBreakdown[];
+  withdrawals: PoolWithdrawalRequest[];
+  ledger: PoolLedgerEntry[];
+  capturedAt: Date;
 };

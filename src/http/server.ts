@@ -6,7 +6,9 @@ import { AppError, UserInputError } from "../domain/errors.js";
 import { Logger } from "../logger.js";
 import { parseAddress, parseHex } from "../utils/evm.js";
 import { renderSigningPage } from "./signingPage.js";
+import { renderPoolPage } from "./poolPage.js";
 import { verifyTelegramInitData } from "./telegramInitData.js";
+import { serializePoolAnalytics } from "./poolAnalyticsResponse.js";
 import { configureTelegramBot } from "../bot/telegramCommands.js";
 
 const SignaturePayloadSchema = z.object({
@@ -32,6 +34,12 @@ export async function startHttpRuntime(appState: App, config: AppConfig): Promis
       }
       if (request.method === "GET" && url.pathname.startsWith("/sign/")) {
         return route(async () => renderSafeSigningPage(appState, url.pathname));
+      }
+      if (request.method === "GET" && url.pathname.startsWith("/pool/")) {
+        return route(async () => renderPoolAnalyticsPage(url.pathname));
+      }
+      if (request.method === "GET" && url.pathname.startsWith("/api/pools/") && url.pathname.endsWith("/analytics")) {
+        return route(async () => getPoolAnalytics(appState, config, url));
       }
       if (request.method === "POST" && url.pathname.startsWith("/api/safe-submissions/")) {
         return route(async () => submitSafeSignature(appState, config, request, url.pathname));
@@ -67,6 +75,20 @@ async function renderSafeSigningPage(appState: App, pathname: string): Promise<R
   });
 }
 
+async function renderPoolAnalyticsPage(pathname: string): Promise<Response> {
+  return new Response(renderPoolPage(requiredPathSuffix(pathname, "/pool/")), {
+    headers: { "Content-Type": "text/html; charset=utf-8" }
+  });
+}
+
+async function getPoolAnalytics(appState: App, config: AppConfig, url: URL): Promise<Response> {
+  const analytics = await appState.poolService.getAnalytics(
+    requiredApiPoolChatId(url.pathname),
+    resolveTelegramUserIdFromQuery(url, config)
+  );
+  return Response.json(serializePoolAnalytics(analytics));
+}
+
 async function submitSafeSignature(appState: App, config: AppConfig, request: Request, pathname: string): Promise<Response> {
   const submissionId = requiredApiSubmissionId(pathname);
   const payload = await parseJsonBody(request);
@@ -91,6 +113,18 @@ function resolveTelegramUserId(payload: z.infer<typeof SignaturePayloadSchema>, 
     return payload.telegramUserId;
   }
   throw new UserInputError("Telegram user identity is required");
+}
+
+function resolveTelegramUserIdFromQuery(url: URL, config: AppConfig): string {
+  const telegramInitData = url.searchParams.get("telegramInitData");
+  if (telegramInitData !== null && telegramInitData.length > 0) {
+    return verifyTelegramInitData(telegramInitData, config.telegramBotToken);
+  }
+  const localTelegramUserId = url.searchParams.get("telegramUserId");
+  if (config.appEnv !== "production" && localTelegramUserId !== null && /^\d+$/.test(localTelegramUserId)) {
+    return localTelegramUserId;
+  }
+  throw new UserInputError("Telegram Web App identity is required");
 }
 
 async function route(action: () => Promise<Response>): Promise<Response> {
@@ -123,6 +157,19 @@ function requiredApiSubmissionId(pathname: string): string {
     throw new UserInputError("Missing Safe submission ID");
   }
   return decodeURIComponent(submissionId);
+}
+
+function requiredApiPoolChatId(pathname: string): string {
+  const prefix = "/api/pools/";
+  const suffix = "/analytics";
+  if (!pathname.startsWith(prefix) || !pathname.endsWith(suffix)) {
+    throw new UserInputError("Invalid pool analytics route");
+  }
+  const chatId = pathname.slice(prefix.length, -suffix.length);
+  if (chatId.length === 0) {
+    throw new UserInputError("Missing pool chat ID");
+  }
+  return decodeURIComponent(chatId);
 }
 
 async function parseJsonBody(request: Request): Promise<z.infer<typeof SignaturePayloadSchema>> {

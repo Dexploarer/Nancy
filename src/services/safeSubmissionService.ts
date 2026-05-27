@@ -11,6 +11,7 @@ import type { Repository } from "../storage/repository.js";
 import { createId } from "../utils/ids.js";
 import { extractConfirmations, SafeService, type SafeTransactionServiceStatus } from "../chain/safeService.js";
 import { WalletLinkService } from "./walletLinkService.js";
+import { PoolService } from "./poolService.js";
 
 type PreparedSafeTransaction = {
   safeTransaction: SafeTransactionData;
@@ -22,7 +23,9 @@ export class SafeSubmissionService {
   constructor(
     private readonly repository: Repository,
     private readonly safeService: SafeService,
-    private readonly walletLinkService: WalletLinkService
+    private readonly walletLinkService: WalletLinkService,
+    private readonly poolService: PoolService,
+    private readonly platformFeeRecipient: Address
   ) {}
 
   async prepareTradeSubmission(chatId: ChatId, proposalId: string): Promise<SafeSubmission> {
@@ -39,6 +42,13 @@ export class SafeSubmissionService {
       throw new UserInputError("Flap launch proposal not found", { proposalId });
     }
     return this.prepareSubmission(chatId, "flap-launch", proposal.id, proposal.transactions);
+  }
+
+  async prepareWithdrawalSubmission(chatId: ChatId, withdrawalId: string): Promise<SafeSubmission> {
+    const transactions = await this.poolService.getWithdrawalTransactions(chatId, withdrawalId, this.platformFeeRecipient);
+    const submission = await this.prepareSubmission(chatId, "withdrawal", withdrawalId, transactions);
+    await this.poolService.markWithdrawalPrepared(chatId, withdrawalId, submission.id);
+    return submission;
   }
 
   async submitOwnerSignature(
@@ -93,11 +103,15 @@ export class SafeSubmissionService {
   async execute(submissionId: string): Promise<Hex> {
     const submission = await this.getSubmissionOrThrow(submissionId);
     const status = await this.safeService.getTransaction(submission.transactionServiceUrl, submission.safeTxHash);
-    return this.safeService.executeTransaction(
+    const transactionHash = await this.safeService.executeTransaction(
       submission.safeAddress,
       submission.safeTransaction,
       extractConfirmations(status)
     );
+    if (submission.sourceType === "withdrawal") {
+      await this.poolService.markWithdrawalExecuted(submission.sourceId, transactionHash);
+    }
+    return transactionHash;
   }
 
   async getSubmission(submissionId: string): Promise<SafeSubmission | null> {
