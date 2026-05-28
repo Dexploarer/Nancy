@@ -57,6 +57,10 @@ export class SafeDeploymentService {
     }
   }
 
+  async getNativeBalanceWei(address: Address): Promise<bigint> {
+    return this.publicClient.getBalance({ address });
+  }
+
   async createSafe(input: CreateSafeInput): Promise<SafeDeployment> {
     if (this.walletClient === undefined || this.executorAccount === undefined) {
       throw new UserInputError("SAFE_EXECUTOR_PRIVATE_KEY is required to create a Safe from Telegram");

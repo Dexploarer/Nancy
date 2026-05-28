@@ -215,17 +215,27 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
     title: "Update pool NAV snapshot",
     adminOnly: false,
     fields: [
-      { label: "Total NAV in BNB (must equal liquid + positions)", example: "1.2", validate: (v) => void parseNonNegativeBnbAmount(v) },
-      { label: "Liquid BNB in the Safe", example: "0.7", validate: (v) => void parseNonNegativeBnbAmount(v) },
-      { label: "Open positions value in BNB", example: "0.5", validate: (v) => void parseNonNegativeBnbAmount(v) }
+      {
+        label: "Open positions value in BNB (liquid is read from the Safe automatically)",
+        example: "0.5",
+        validate: (v) => void parseNonNegativeBnbAmount(v),
+        choices: [{ label: "0 (all liquid)", value: "0" }]
+      }
     ],
     execute: async (c, values) => {
+      const positionsWei = parseNonNegativeBnbAmount(required(values, 0));
+      const wallet = await c.deps.groupWalletService.getWallet(c.chatId);
+      if (wallet === null) {
+        throw new UserInputError("This group has no Safe yet. Create one first.");
+      }
+      // Liquid is the Safe's live BNB balance — no need to type it.
+      const liquidWei = await c.deps.safeDeploymentService.getNativeBalanceWei(wallet.safeAddress);
       const analytics = await c.deps.poolService.updateNav({
         chatId: c.chatId,
         operatorTelegramId: c.telegramUserId,
-        navWei: parseNonNegativeBnbAmount(required(values, 0)),
-        liquidWei: parseNonNegativeBnbAmount(required(values, 1)),
-        positionsWei: parseNonNegativeBnbAmount(required(values, 2))
+        navWei: liquidWei + positionsWei,
+        liquidWei,
+        positionsWei
       });
       await c.reply(formatPoolAnalytics(analytics));
     }
