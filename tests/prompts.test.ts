@@ -3,6 +3,7 @@ import type { Context } from "grammy";
 import type { BotDependencies } from "../src/bot/bot.js";
 import {
   handlePromptCancel,
+  handlePromptChoice,
   routePromptInput
 } from "../src/bot/promptController.js";
 import {
@@ -34,6 +35,20 @@ function fakeContext(text: string): { ctx: Context; replies: string[]; markups: 
     answerCallbackQuery: async () => {}
   } as unknown as Context;
   return { ctx, replies, markups };
+}
+
+function fakeCallbackContext(data: string): { ctx: Context; replies: string[] } {
+  const replies: string[] = [];
+  const ctx = {
+    chat: { id: 555, type: "group" },
+    from: { id: 111 },
+    callbackQuery: { data },
+    reply: async (value: string) => {
+      replies.push(value);
+    },
+    answerCallbackQuery: async () => {}
+  } as unknown as Context;
+  return { ctx, replies };
 }
 
 describe("prompt state helpers", () => {
@@ -114,6 +129,28 @@ describe("routePromptInput", () => {
     const link = await repository.getWalletLink(USER, "0x1111111111111111111111111111111111111111");
     expect(link?.status).toBe("pending");
     // the prompt is cleared after completion
+    expect(await repository.getPendingPrompt(CHAT, USER)).toBeNull();
+  });
+
+  it("accepts a tapped choice button as the field value", async () => {
+    const repository = new MemoryRepository();
+    const calls: Array<{ role: string }> = [];
+    const deps = {
+      repository,
+      poolService: {
+        setRole: async (input: { role: string }) => {
+          calls.push({ role: input.role });
+          return { telegramUserId: "222", role: input.role };
+        }
+      }
+    } as unknown as BotDependencies;
+    // already collected the target user id; now on the role field
+    await repository.savePendingPrompt(withInput(newPrompt(CHAT, USER, "pool_role"), "222"));
+
+    const { ctx } = fakeCallbackContext("choice:trader");
+    await handlePromptChoice(deps, ctx);
+
+    expect(calls[0]?.role).toBe("trader");
     expect(await repository.getPendingPrompt(CHAT, USER)).toBeNull();
   });
 

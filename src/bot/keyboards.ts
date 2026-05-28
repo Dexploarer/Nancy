@@ -33,8 +33,14 @@ export function mainMenuKeyboard(): InlineKeyboard {
     .text("Launch Flap", "menu:flap_launch");
 }
 
-export function promptStepKeyboard(showBack: boolean): InlineKeyboard {
+export function promptStepKeyboard(showBack: boolean, choices: { label: string; value: string }[] = []): InlineKeyboard {
   const keyboard = new InlineKeyboard();
+  for (let index = 0; index < choices.length; index += 3) {
+    for (const choice of choices.slice(index, index + 3)) {
+      keyboard.text(choice.label, `choice:${choice.value}`);
+    }
+    keyboard.row();
+  }
   if (showBack) {
     keyboard.text("Back", "prompt_back");
   }

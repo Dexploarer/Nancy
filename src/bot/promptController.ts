@@ -31,15 +31,24 @@ function buildContext(deps: BotDependencies, ctx: Context, chatId: string, teleg
   };
 }
 
-async function askField(ctx: Context, flow: PromptFlow, prompt: PendingPrompt): Promise<void> {
+async function askField(deps: BotDependencies, ctx: Context, flow: PromptFlow, prompt: PendingPrompt): Promise<void> {
   const field = nextField(flow, prompt);
   if (field === undefined) {
     return;
   }
+  const chatId = ctx.chat?.id?.toString() ?? "";
+  const telegramUserId = ctx.from?.id?.toString() ?? "";
+  const choices =
+    field.choices === undefined
+      ? []
+      : typeof field.choices === "function"
+        ? await field.choices(buildContext(deps, ctx, chatId, telegramUserId))
+        : field.choices;
   const step = prompt.collected.length + 1;
+  const hint = choices.length > 0 ? "Tap an option below, or send the value as a message." : "Send the value as a message.";
   await ctx.reply(
-    [`${flow.title} — step ${step} of ${flow.fields.length}`, "", field.label, `Example: ${field.example}`, "", "Send the value as a message."].join("\n"),
-    { reply_markup: promptStepKeyboard(prompt.collected.length > 0) }
+    [`${flow.title} — step ${step} of ${flow.fields.length}`, "", field.label, `Example: ${field.example}`, "", hint].join("\n"),
+    { reply_markup: promptStepKeyboard(prompt.collected.length > 0, choices) }
   );
 }
 
@@ -55,7 +64,7 @@ export async function startPromptFlow(deps: BotDependencies, ctx: Context, comma
   }
   const prompt = newPrompt(chatId, telegramUserId, command);
   await deps.repository.savePendingPrompt(prompt);
-  await askField(ctx, flow, prompt);
+  await askField(deps, ctx, flow, prompt);
 }
 
 export async function routePromptInput(deps: BotDependencies, ctx: Context): Promise<boolean> {
@@ -68,17 +77,36 @@ export async function routePromptInput(deps: BotDependencies, ctx: Context): Pro
   if (chatId === undefined || fromId === undefined) {
     return false;
   }
+  if ((await deps.repository.getPendingPrompt(chatId, fromId)) === null) {
+    return false;
+  }
+  await applyPromptValue(deps, ctx, chatId, fromId, text.trim());
+  return true;
+}
+
+// A tapped choice button feeds the same value path as typed input.
+export async function handlePromptChoice(deps: BotDependencies, ctx: Context): Promise<void> {
+  await ctx.answerCallbackQuery();
+  const chatId = ctx.chat?.id?.toString();
+  const fromId = ctx.from?.id?.toString();
+  if (chatId === undefined || fromId === undefined) {
+    return;
+  }
+  const data = ctx.callbackQuery?.data ?? "";
+  await applyPromptValue(deps, ctx, chatId, fromId, data.slice("choice:".length));
+}
+
+async function applyPromptValue(deps: BotDependencies, ctx: Context, chatId: string, fromId: string, value: string): Promise<void> {
   const prompt = await deps.repository.getPendingPrompt(chatId, fromId);
   if (prompt === null) {
-    return false;
+    return;
   }
   const flow = getFlow(prompt.command);
   const field = flow === undefined ? undefined : nextField(flow, prompt);
   if (flow === undefined || field === undefined) {
     await deps.repository.deletePendingPrompt(chatId, fromId);
-    return false;
+    return;
   }
-  const value = text.trim();
   try {
     field.validate(value);
   } catch (error) {
@@ -86,7 +114,7 @@ export async function routePromptInput(deps: BotDependencies, ctx: Context): Pro
       await ctx.reply(`${error.message}\n\nSend the value again, or tap Cancel.`, {
         reply_markup: promptStepKeyboard(prompt.collected.length > 0)
       });
-      return true;
+      return;
     }
     throw error;
   }
@@ -94,11 +122,10 @@ export async function routePromptInput(deps: BotDependencies, ctx: Context): Pro
   if (isComplete(flow, updated)) {
     await deps.repository.deletePendingPrompt(chatId, fromId);
     await runExecute(deps, ctx, flow, chatId, fromId, updated.collected);
-    return true;
+    return;
   }
   await deps.repository.savePendingPrompt(updated);
-  await askField(ctx, flow, updated);
-  return true;
+  await askField(deps, ctx, flow, updated);
 }
 
 async function runExecute(
@@ -140,7 +167,7 @@ export async function handlePromptBack(deps: BotDependencies, ctx: Context): Pro
   }
   const reverted = withoutLast(prompt);
   await deps.repository.savePendingPrompt(reverted);
-  await askField(ctx, flow, reverted);
+  await askField(deps, ctx, flow, reverted);
 }
 
 export async function handlePromptCancel(deps: BotDependencies, ctx: Context): Promise<void> {

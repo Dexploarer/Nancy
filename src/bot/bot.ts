@@ -28,7 +28,7 @@ import { DepositVerificationService } from "../services/depositVerificationServi
 import { flapLaunchKeyboard, helpText, linkPageKeyboard, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard, tradeProposalKeyboard } from "./keyboards.js";
 import { registerSafeCallbacks } from "./safeCallbacks.js";
 import { registerPoolCommands } from "./poolCommands.js";
-import { beginUnlink, handleMenuSelection, handlePromptBack, handlePromptCancel, routePromptInput } from "./promptController.js";
+import { beginUnlink, handleMenuSelection, handlePromptBack, handlePromptCancel, handlePromptChoice, routePromptInput } from "./promptController.js";
 import {
   emptyToUndefined,
   handleUserCommand,
@@ -357,6 +357,10 @@ export function createBot(dependencies: BotDependencies): Bot {
 
   bot.callbackQuery("prompt_cancel", async (ctx) => {
     await handlePromptCancel(dependencies, ctx);
+  });
+
+  bot.callbackQuery(/^choice:/, async (ctx) => {
+    await handlePromptChoice(dependencies, ctx);
   });
 
   bot.callbackQuery(/^menu:/, async (ctx) => {

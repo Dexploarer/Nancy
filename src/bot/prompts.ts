@@ -26,10 +26,14 @@ export type PromptContext = {
   requireAdmin: () => Promise<void>;
 };
 
+export type PromptChoice = { label: string; value: string };
+
 export type PromptField = {
   label: string;
   example: string;
   validate: (value: string) => void;
+  // Optional one-tap shortcuts. Typing a custom value still works.
+  choices?: PromptChoice[] | ((context: PromptContext) => Promise<PromptChoice[]>);
 };
 
 export type PromptFlow = {
@@ -133,7 +137,16 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
     adminOnly: false,
     fields: [
       { label: "Token address", example: "0x7777777777777777777777777777777777777777", validate: (v) => void parseAddress(v) },
-      { label: "BNB amount to spend", example: "0.25", validate: (v) => void parseBnbAmount(v) }
+      {
+        label: "BNB amount to spend",
+        example: "0.25",
+        validate: (v) => void parseBnbAmount(v),
+        choices: [
+          { label: "0.05", value: "0.05" },
+          { label: "0.1", value: "0.1" },
+          { label: "0.25", value: "0.25" }
+        ]
+      }
     ],
     execute: async (c, values) => {
       await c.deps.poolService.requireTraderAccess(c.chatId, c.telegramUserId);
@@ -156,7 +169,16 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
     adminOnly: false,
     fields: [
       { label: "Member's numeric Telegram user ID", example: "123456789", validate: (v) => void parsePositiveInteger(v, "telegramUserId") },
-      { label: "Role: owner, trader, or member", example: "trader", validate: validateRole }
+      {
+        label: "Role: owner, trader, or member",
+        example: "trader",
+        validate: validateRole,
+        choices: [
+          { label: "Owner", value: "owner" },
+          { label: "Trader", value: "trader" },
+          { label: "Member", value: "member" }
+        ]
+      }
     ],
     execute: async (c, values) => {
       const member = await c.deps.poolService.setRole({
@@ -223,8 +245,26 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
     title: "Request a pool withdrawal",
     adminOnly: false,
     fields: [
-      { label: "Basis points to withdraw (5000 = 50%)", example: "5000", validate: (v) => void parseBasisPoints(v, 10000) },
-      { label: "Recipient address (must be a wallet you linked)", example: "0x1111111111111111111111111111111111111111", validate: (v) => void parseAddress(v) }
+      {
+        label: "How much to withdraw",
+        example: "5000",
+        validate: (v) => void parseBasisPoints(v, 10000),
+        choices: [
+          { label: "25%", value: "2500" },
+          { label: "50%", value: "5000" },
+          { label: "100%", value: "10000" }
+        ]
+      },
+      {
+        label: "Recipient address (must be a wallet you linked)",
+        example: "0x1111111111111111111111111111111111111111",
+        validate: (v) => void parseAddress(v),
+        choices: async (c) =>
+          (await c.deps.walletLinkService.getLinkedWallets(c.telegramUserId)).map((wallet) => ({
+            label: `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`,
+            value: wallet.address
+          }))
+      }
     ],
     execute: async (c, values) => {
       const withdrawalBps = parseBasisPoints(required(values, 0), 10000);
