@@ -81,6 +81,25 @@ try {
   });
   assert(rejected.status === 400, "wrong-key signature was not rejected");
 
+  // 4b. connect-first link: create the link from the connected wallet (no typed address), then sign
+  const connectAccount = privateKeyToAccount("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a");
+  const createResponse = await fetch(`${base}/api/wallet-links`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ telegramUserId: "779", address: connectAccount.address })
+  });
+  const createBody = (await createResponse.json()) as { nonce: string; message: string };
+  assert(createResponse.status === 200, `create wallet link did not return 200 (got ${createResponse.status})`);
+  const connectSignature = await connectAccount.signMessage({ message: createBody.message });
+  const connectComplete = await fetch(`${base}/api/wallet-links/${encodeURIComponent(createBody.nonce)}/signatures`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ signature: connectSignature })
+  });
+  const connectCompleteBody = (await connectComplete.json()) as { status: string };
+  assert(connectComplete.status === 200, "connect-first link submit did not return 200");
+  assert(connectCompleteBody.status === "linked", "connect-first wallet link was not completed");
+
   // 5. pool analytics over HTTP
   await app.repository.saveGroupWallet({
     chatId: "smoke",

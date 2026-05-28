@@ -5,7 +5,7 @@ import { Logger } from "../logger.js";
 import { renderUsage } from "./commandUsage.js";
 import { requireChatId, requireGroupAdmin, requireTelegramUserId } from "./commandUtils.js";
 import { formatGeneratedWallet, formatWallet } from "./formatters.js";
-import { confirmUnlinkKeyboard, promptStepKeyboard } from "./keyboards.js";
+import { confirmUnlinkKeyboard, connectWalletKeyboard, promptStepKeyboard } from "./keyboards.js";
 import { formatPoolAnalytics } from "./poolCommands.js";
 import {
   getFlow,
@@ -171,7 +171,24 @@ export async function beginUnlink(deps: BotDependencies, ctx: Context): Promise<
   );
 }
 
+async function beginLinkWallet(deps: BotDependencies, ctx: Context): Promise<void> {
+  // In a DM we can identify the user from initData, so offer the zero-typing
+  // connect-first flow. In a group there is no initData, so fall back to the
+  // type-the-address prompt.
+  if (ctx.chat?.type === "private") {
+    await ctx.reply("Tap to connect your wallet — no address to type.", {
+      reply_markup: connectWalletKeyboard(deps.config.publicBaseUrl)
+    });
+    return;
+  }
+  await startPromptFlow(deps, ctx, "link_start");
+}
+
 export async function handleMenuSelection(deps: BotDependencies, ctx: Context, command: string): Promise<void> {
+  if (command === "link_start") {
+    await beginLinkWallet(deps, ctx);
+    return;
+  }
   if (getFlow(command) !== undefined) {
     await startPromptFlow(deps, ctx, command);
     return;

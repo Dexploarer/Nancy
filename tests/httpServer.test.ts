@@ -105,6 +105,47 @@ describe("HTTP fetch handler", () => {
     expect(stored?.status).toBe("pending");
   });
 
+  it("creates and completes a wallet link from the connected wallet without a typed address or nonce", async () => {
+    const app = buildApp(testConfig());
+    const handler = createFetchHandler(app, testConfig());
+    const account = privateKeyToAccount(ownerKey);
+
+    const createResponse = await handler(
+      new Request("http://test/api/wallet-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramUserId: "222", address: account.address })
+      })
+    );
+    expect(createResponse.status).toBe(200);
+    const created = (await createResponse.json()) as { nonce: string; message: string };
+
+    const signature = await account.signMessage({ message: created.message });
+    const completeResponse = await handler(
+      new Request(`http://test/api/wallet-links/${encodeURIComponent(created.nonce)}/signatures`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signature })
+      })
+    );
+    expect(completeResponse.status).toBe(200);
+    const stored = await app.repository.getWalletLink("222", account.address);
+    expect(stored?.status).toBe("linked");
+  });
+
+  it("rejects creating a wallet link with no Telegram identity", async () => {
+    const handler = createFetchHandler(buildApp(testConfig()), testConfig());
+    const account = privateKeyToAccount(ownerKey);
+    const response = await handler(
+      new Request("http://test/api/wallet-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: account.address })
+      })
+    );
+    expect(response.status).toBe(400);
+  });
+
   it("returns pool analytics JSON for a member", async () => {
     const app = buildApp(testConfig());
     const handler = createFetchHandler(app, testConfig());

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { WalletLink } from "../src/domain/types.js";
-import { renderLinkPage } from "../src/http/linkPage.js";
+import { renderLinkPage, renderLinkStartPage } from "../src/http/linkPage.js";
 
 const link: WalletLink = {
   telegramUserId: "1",
@@ -21,5 +21,14 @@ describe("renderLinkPage", () => {
     const html = renderLinkPage(link, undefined);
     expect(html).not.toContain("@walletconnect/ethereum-provider");
     expect(html).toContain(link.address);
+  });
+});
+
+describe("renderLinkStartPage", () => {
+  it("captures the connected wallet via the create endpoint (no typed address)", () => {
+    const html = renderLinkStartPage("proj_abc");
+    expect(html).toContain("/api/wallet-links");
+    expect(html).toContain("eth_requestAccounts");
+    expect(html).toContain("@walletconnect/ethereum-provider");
   });
 });

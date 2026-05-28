@@ -78,6 +78,12 @@ export function linkPageKeyboard(nonce: string, publicBaseUrl: string | undefine
   return pageOpenButton("Connect & link wallet", `${baseUrl(publicBaseUrl)}/link/${encodeURIComponent(nonce)}`, preferWebApp);
 }
 
+// Connect-first link button (no nonce): opens the page that captures the address
+// from the connected wallet. WebApp-only because it needs Telegram initData identity.
+export function connectWalletKeyboard(publicBaseUrl: string | undefined): InlineKeyboard {
+  return new InlineKeyboard().webApp("Connect & link wallet", `${baseUrl(publicBaseUrl)}/link`);
+}
+
 export function safeSubmissionKeyboard(submissionId: string, publicBaseUrl: string | undefined, preferWebApp: boolean): InlineKeyboard {
   return pageOpenButton("Open & sign", `${baseUrl(publicBaseUrl)}/sign/${encodeURIComponent(submissionId)}`, preferWebApp);
 }

@@ -6,7 +6,7 @@ import { AppError, UserInputError } from "../domain/errors.js";
 import { Logger } from "../logger.js";
 import { parseAddress, parseHex } from "../utils/evm.js";
 import { renderSigningPage } from "./signingPage.js";
-import { renderLinkPage } from "./linkPage.js";
+import { renderLinkPage, renderLinkStartPage } from "./linkPage.js";
 import { renderPoolPage } from "./poolPage.js";
 import { verifyTelegramInitData } from "./telegramInitData.js";
 import { serializePoolAnalytics } from "./poolAnalyticsResponse.js";
@@ -23,6 +23,12 @@ const WalletLinkPayloadSchema = z.object({
   signature: z.string().regex(/^0x[0-9a-fA-F]+$/)
 });
 
+const CreateWalletLinkPayloadSchema = z.object({
+  telegramUserId: z.string().regex(/^\d+$/).optional(),
+  telegramInitData: z.string().optional(),
+  address: z.string().min(1)
+});
+
 export function createFetchHandler(appState: App, config: AppConfig): (request: Request) => Response | Promise<Response> {
   const webhookPath = config.telegramWebhookSecret === undefined ? undefined : `/telegram/${config.telegramWebhookSecret}`;
   const webhookHandler = webhookPath === undefined ? undefined : webhookCallback(appState.bot, "bun");
@@ -35,6 +41,13 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
     if (request.method === "GET" && url.pathname.startsWith("/sign/")) {
       return route(async () => renderSafeSigningPage(appState, url.pathname, config.walletConnectProjectId, config.bscChainId));
     }
+    if (request.method === "GET" && url.pathname === "/link") {
+      return route(async () =>
+        new Response(renderLinkStartPage(config.walletConnectProjectId, config.bscChainId), {
+          headers: { "Content-Type": "text/html; charset=utf-8" }
+        })
+      );
+    }
     if (request.method === "GET" && url.pathname.startsWith("/link/")) {
       return route(async () => renderWalletLinkPage(appState, url.pathname, config.walletConnectProjectId, config.bscChainId));
     }
@@ -43,6 +56,9 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
     }
     if (request.method === "GET" && url.pathname.startsWith("/api/pools/") && url.pathname.endsWith("/analytics")) {
       return route(async () => getPoolAnalytics(appState, config, url));
+    }
+    if (request.method === "POST" && url.pathname === "/api/wallet-links") {
+      return route(async () => createWalletLink(appState, config, request));
     }
     if (request.method === "POST" && url.pathname.startsWith("/api/wallet-links/")) {
       return route(async () => submitWalletLinkSignature(appState, request, url.pathname));
@@ -105,6 +121,16 @@ async function submitWalletLinkSignature(appState: App, request: Request, pathna
   return Response.json({ address: link.address, status: link.status });
 }
 
+// Link-by-connect: the page connects a wallet, identifies the user from verified
+// Telegram initData, and starts a pending link for the connected address — so the
+// user never types their address or a nonce.
+async function createWalletLink(appState: App, config: AppConfig, request: Request): Promise<Response> {
+  const payload = await parseCreateWalletLinkBody(request);
+  const telegramUserId = resolveTelegramUserIdFromBody(payload, config);
+  const { link, message } = await appState.walletLinkService.beginLink(telegramUserId, parseAddress(payload.address));
+  return Response.json({ nonce: link.nonce, message });
+}
+
 async function renderPoolAnalyticsPage(pathname: string): Promise<Response> {
   return new Response(renderPoolPage(requiredPathSuffix(pathname, "/pool/")), {
     headers: { "Content-Type": "text/html; charset=utf-8" }
@@ -143,6 +169,16 @@ function resolveTelegramUserId(payload: z.infer<typeof SignaturePayloadSchema>, 
     return payload.telegramUserId;
   }
   throw new UserInputError("Telegram user identity is required");
+}
+
+function resolveTelegramUserIdFromBody(payload: z.infer<typeof CreateWalletLinkPayloadSchema>, config: AppConfig): string {
+  if (payload.telegramInitData !== undefined && payload.telegramInitData.length > 0) {
+    return verifyTelegramInitData(payload.telegramInitData, config.telegramBotToken);
+  }
+  if (config.appEnv !== "production" && payload.telegramUserId !== undefined) {
+    return payload.telegramUserId;
+  }
+  throw new UserInputError("Telegram Web App identity is required");
 }
 
 function resolveTelegramUserIdFromQuery(url: URL, config: AppConfig): string {
@@ -232,6 +268,17 @@ async function parseWalletLinkBody(request: Request): Promise<z.infer<typeof Wal
   } catch (error) {
     if (error instanceof z.ZodError || error instanceof SyntaxError) {
       throw new UserInputError("Invalid wallet-link submission body");
+    }
+    throw error;
+  }
+}
+
+async function parseCreateWalletLinkBody(request: Request): Promise<z.infer<typeof CreateWalletLinkPayloadSchema>> {
+  try {
+    return CreateWalletLinkPayloadSchema.parse(await request.json());
+  } catch (error) {
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
+      throw new UserInputError("Invalid wallet-link request body");
     }
     throw error;
   }

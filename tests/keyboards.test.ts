@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { linkPageKeyboard, poolAppKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "../src/bot/keyboards.js";
+import { connectWalletKeyboard, linkPageKeyboard, poolAppKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "../src/bot/keyboards.js";
 
 type Btn = { text: string; url?: string; web_app?: { url: string } };
 function buttons(kb: { inline_keyboard: Btn[][] }): Btn[] {
@@ -52,5 +52,10 @@ describe("page-open keyboards", () => {
   it("builds a signing button from the submission id", () => {
     const b = buttons(safeSubmissionKeyboard("safe_1", "https://x.test", true))[0]!;
     expect(b.web_app?.url).toBe("https://x.test/sign/safe_1");
+  });
+
+  it("connect-wallet button opens the connect-first link page as a WebApp", () => {
+    const b = buttons(connectWalletKeyboard("https://x.test"))[0]!;
+    expect(b.web_app?.url).toBe("https://x.test/link");
   });
 });
