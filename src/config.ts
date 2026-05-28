@@ -21,6 +21,7 @@ const EnvSchema = z
     DEX_DEADLINE_SECONDS: z.coerce.number().int().min(60).max(604800),
     HTTP_PORT: z.coerce.number().int().min(1).max(65535),
     PUBLIC_BASE_URL: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
+    WALLETCONNECT_PROJECT_ID: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional()),
     TELEGRAM_WEBHOOK_SECRET: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(16).optional()),
     PINATA_JWT: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional()),
     RISK_CHECK_MODE: z.enum(["warn", "block"]),
@@ -55,6 +56,7 @@ export type AppConfig = {
   dexDeadlineSeconds: number;
   httpPort: number;
   publicBaseUrl?: string;
+  walletConnectProjectId?: string;
   telegramWebhookSecret?: string;
   pinataJwt?: string;
   riskCheckMode: "warn" | "block";
@@ -82,6 +84,7 @@ export function loadConfig(): AppConfig {
     dexDeadlineSeconds: env.DEX_DEADLINE_SECONDS,
     httpPort: env.HTTP_PORT,
     ...(env.PUBLIC_BASE_URL === undefined ? {} : { publicBaseUrl: env.PUBLIC_BASE_URL }),
+    ...(env.WALLETCONNECT_PROJECT_ID === undefined ? {} : { walletConnectProjectId: env.WALLETCONNECT_PROJECT_ID }),
     ...(env.TELEGRAM_WEBHOOK_SECRET === undefined ? {} : { telegramWebhookSecret: env.TELEGRAM_WEBHOOK_SECRET }),
     ...(env.PINATA_JWT === undefined ? {} : { pinataJwt: env.PINATA_JWT }),
     riskCheckMode: env.RISK_CHECK_MODE,
