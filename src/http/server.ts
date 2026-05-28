@@ -33,10 +33,10 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
       return Response.json({ ok: true });
     }
     if (request.method === "GET" && url.pathname.startsWith("/sign/")) {
-      return route(async () => renderSafeSigningPage(appState, url.pathname, config.walletConnectProjectId));
+      return route(async () => renderSafeSigningPage(appState, url.pathname, config.walletConnectProjectId, config.bscChainId));
     }
     if (request.method === "GET" && url.pathname.startsWith("/link/")) {
-      return route(async () => renderWalletLinkPage(appState, url.pathname, config.walletConnectProjectId));
+      return route(async () => renderWalletLinkPage(appState, url.pathname, config.walletConnectProjectId, config.bscChainId));
     }
     if (request.method === "GET" && url.pathname.startsWith("/pool/")) {
       return route(async () => renderPoolAnalyticsPage(url.pathname));
@@ -80,20 +80,20 @@ export async function startHttpRuntime(appState: App, config: AppConfig): Promis
   await appState.bot.start();
 }
 
-async function renderSafeSigningPage(appState: App, pathname: string, walletConnectProjectId?: string): Promise<Response> {
+async function renderSafeSigningPage(appState: App, pathname: string, walletConnectProjectId?: string, chainId?: number): Promise<Response> {
   const submission = await appState.safeSubmissionService.getSubmission(requiredPathSuffix(pathname, "/sign/"));
   if (submission === null) {
     return new Response("Safe submission not found", { status: 404 });
   }
-  return new Response(renderSigningPage(submission, walletConnectProjectId), {
+  return new Response(renderSigningPage(submission, walletConnectProjectId, chainId), {
     headers: { "Content-Type": "text/html; charset=utf-8" }
   });
 }
 
-async function renderWalletLinkPage(appState: App, pathname: string, walletConnectProjectId?: string): Promise<Response> {
+async function renderWalletLinkPage(appState: App, pathname: string, walletConnectProjectId?: string, chainId?: number): Promise<Response> {
   const nonce = requiredPathSuffix(pathname, "/link/");
   const link = await appState.walletLinkService.getPendingLinkByNonce(nonce);
-  return new Response(renderLinkPage(link, walletConnectProjectId), {
+  return new Response(renderLinkPage(link, walletConnectProjectId, chainId), {
     headers: { "Content-Type": "text/html; charset=utf-8" }
   });
 }

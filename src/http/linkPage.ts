@@ -2,7 +2,7 @@ import type { WalletLink } from "../domain/types.js";
 import { buildWalletLinkMessage } from "../services/walletLinkService.js";
 import { walletProviderScript } from "./walletProviderScript.js";
 
-export function renderLinkPage(link: WalletLink, walletConnectProjectId?: string): string {
+export function renderLinkPage(link: WalletLink, walletConnectProjectId?: string, chainId?: number): string {
   const nonceJson = JSON.stringify(link.nonce);
   const addressJson = JSON.stringify(link.address);
   const messageJson = JSON.stringify(buildWalletLinkMessage(link));
@@ -35,7 +35,7 @@ export function renderLinkPage(link: WalletLink, walletConnectProjectId?: string
     <output id="output">${alreadyLinked ? "This wallet is already linked." : "Waiting for signature."}</output>
   </main>
   <script type="module">
-    ${walletProviderScript(walletConnectProjectId)}
+    ${walletProviderScript(walletConnectProjectId, chainId)}
     const nonce = ${nonceJson};
     const expectedAddress = ${addressJson};
     const message = ${messageJson};

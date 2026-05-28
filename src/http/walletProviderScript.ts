@@ -2,13 +2,13 @@
 // that prefers an injected wallet (window.ethereum) and otherwise opens WalletConnect
 // (deep-links to a phone wallet) — but only when a project id is configured, so the
 // WalletConnect bundle is never referenced when the feature is off.
-export function walletProviderScript(walletConnectProjectId?: string): string {
+export function walletProviderScript(walletConnectProjectId?: string, chainId = 56): string {
   const wcProjectJson = JSON.stringify(walletConnectProjectId ?? "");
   const fallback = walletConnectProjectId
     ? `const { EthereumProvider } = await import("https://esm.sh/@walletconnect/ethereum-provider@2");
       wcProvider = await EthereumProvider.init({
         projectId: WC_PROJECT_ID,
-        chains: [56],
+        chains: [${chainId}],
         showQrModal: true,
         methods: ["eth_requestAccounts", "personal_sign"],
         events: ["accountsChanged", "chainChanged"]

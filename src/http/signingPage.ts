@@ -1,7 +1,7 @@
 import type { SafeSubmission } from "../domain/types.js";
 import { walletProviderScript } from "./walletProviderScript.js";
 
-export function renderSigningPage(submission: SafeSubmission, walletConnectProjectId?: string): string {
+export function renderSigningPage(submission: SafeSubmission, walletConnectProjectId?: string, chainId?: number): string {
   const submissionIdJson = JSON.stringify(submission.id);
   return `<!doctype html>
 <html lang="en">
@@ -37,7 +37,7 @@ export function renderSigningPage(submission: SafeSubmission, walletConnectProje
     <output id="output">Waiting for signature.</output>
   </main>
   <script type="module">
-    ${walletProviderScript(walletConnectProjectId)}
+    ${walletProviderScript(walletConnectProjectId, chainId)}
     const submissionId = ${submissionIdJson};
     const button = document.getElementById("sign");
     const output = document.getElementById("output");
