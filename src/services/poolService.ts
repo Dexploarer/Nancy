@@ -279,6 +279,16 @@ export class PoolService {
     return withdrawals.some((request) => request.status === "queued" || request.status === "prepared");
   }
 
+  // Pickers for the lazy prompts: tap a member / queued withdrawal instead of typing an id.
+  async listMembers(chatId: ChatId): Promise<PoolMember[]> {
+    return this.poolRepository.listPoolMembers(chatId);
+  }
+
+  async listQueuedWithdrawals(chatId: ChatId): Promise<PoolWithdrawalRequest[]> {
+    const requests = await this.poolRepository.listPoolWithdrawalRequests(chatId);
+    return requests.filter((request) => request.status === "queued");
+  }
+
   async getWithdrawalTransactions(chatId: ChatId, requestId: string, feeRecipient: Address): Promise<ChainTransaction[]> {
     const request = await this.requireWithdrawal(chatId, requestId);
     if (request.status !== "queued") {

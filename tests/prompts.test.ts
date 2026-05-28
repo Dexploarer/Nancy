@@ -132,6 +132,19 @@ describe("routePromptInput", () => {
     expect(await repository.getPendingPrompt(CHAT, USER)).toBeNull();
   });
 
+  it("offers existing pool members as a picker for the role target (no numeric id typed)", async () => {
+    const field = PROMPT_FLOWS["pool_role"]!.fields[0]!;
+    const choices =
+      typeof field.choices === "function"
+        ? await field.choices({
+            chatId: CHAT,
+            telegramUserId: USER,
+            deps: { poolService: { listMembers: async () => [{ telegramUserId: "222", role: "member" }] } }
+          } as never)
+        : (field.choices ?? []);
+    expect(choices).toEqual([{ label: "member: 222", value: "222" }]);
+  });
+
   it("accepts a tapped choice button as the field value", async () => {
     const repository = new MemoryRepository();
     const calls: Array<{ role: string }> = [];

@@ -179,7 +179,16 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
     title: "Assign a pool role",
     adminOnly: false,
     fields: [
-      { label: "Member's numeric Telegram user ID", example: "123456789", validate: (v) => void parsePositiveInteger(v, "telegramUserId") },
+      {
+        label: "Member's numeric Telegram user ID",
+        example: "123456789",
+        validate: (v) => void parsePositiveInteger(v, "telegramUserId"),
+        choices: async (c) =>
+          (await c.deps.poolService.listMembers(c.chatId)).map((member) => ({
+            label: `${member.role}: ${member.telegramUserId}`,
+            value: member.telegramUserId
+          }))
+      },
       {
         label: "Role: owner, trader, or member",
         example: "trader",
@@ -303,7 +312,12 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
           if (v.trim().length === 0) {
             throw new InvalidInputError("Enter the withdrawal request ID (from /pool or the request reply).");
           }
-        }
+        },
+        choices: async (c) =>
+          (await c.deps.poolService.listQueuedWithdrawals(c.chatId)).map((request) => ({
+            label: `${request.recipientAddress.slice(0, 6)}… (${request.id.slice(-4)})`,
+            value: request.id
+          }))
       }
     ],
     execute: async (c, values) => {

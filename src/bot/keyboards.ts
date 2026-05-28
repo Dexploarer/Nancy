@@ -22,15 +22,9 @@ export function mainMenuKeyboard(): InlineKeyboard {
     .text("Update NAV", "menu:pool_nav")
     .row()
     .text("Buy token", "menu:buy")
-    .text("Show proposal", "menu:proposal")
+    .text("Launch Flap", "menu:flap_launch")
     .row()
-    .text("Prepare Safe tx", "menu:safe_prepare")
-    .text("Safe tx status", "menu:safe_status")
-    .row()
-    .text("Execute Safe tx", "menu:safe_execute")
-    .row()
-    .text("Flap metadata", "menu:flap_metadata")
-    .text("Launch Flap", "menu:flap_launch");
+    .text("Flap metadata", "menu:flap_metadata");
 }
 
 export function promptStepKeyboard(showBack: boolean, choices: { label: string; value: string }[] = []): InlineKeyboard {
