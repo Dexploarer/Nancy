@@ -37,7 +37,9 @@ export class DepositVerificationService {
   async verifyNativeDeposit(input: {
     transactionHash: Hex;
     safeAddress: Address;
-    amountWei: bigint;
+    // Optional: when provided it is checked against the on-chain value; when
+    // omitted the verified on-chain amount is read and returned (lazy deposit).
+    amountWei?: bigint;
     allowedSenders: Address[];
   }): Promise<VerifiedNativeDeposit> {
     const existingSender = input.allowedSenders.find((sender) => sender.length > 0);
@@ -52,7 +54,7 @@ export class DepositVerificationService {
     if (transaction.to === null || transaction.to.toLowerCase() !== input.safeAddress.toLowerCase()) {
       throw new UserInputError("Deposit transaction must send BNB directly to the group Safe");
     }
-    if (transaction.value !== input.amountWei) {
+    if (input.amountWei !== undefined && transaction.value !== input.amountWei) {
       throw new UserInputError("Deposit transaction amount does not match the requested pool credit");
     }
     const senderAllowed = input.allowedSenders.some((sender) => sender.toLowerCase() === transaction.from.toLowerCase());

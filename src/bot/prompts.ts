@@ -215,26 +215,24 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
     title: "Credit a BNB deposit",
     adminOnly: false,
     fields: [
-      { label: "BNB amount you sent to the Safe", example: "1.0", validate: (v) => void parseBnbAmount(v) },
-      { label: "Transaction hash of that transfer", example: "0x<64 hex>", validate: (v) => void parseTransactionHash(v) }
+      { label: "Transaction hash of your BNB transfer to the Safe", example: "0x<64 hex>", validate: (v) => void parseTransactionHash(v) }
     ],
     execute: async (c, values) => {
-      const amountWei = parseBnbAmount(required(values, 0));
-      const transactionHash = parseTransactionHash(required(values, 1));
+      const transactionHash = parseTransactionHash(required(values, 0));
       const wallet = await c.deps.groupWalletService.getWallet(c.chatId);
       if (wallet === null) {
         throw new UserInputError("This group has no Safe yet. Create one with /safe_group <threshold> first.");
       }
-      await c.deps.depositVerificationService.verifyNativeDeposit({
+      // No amount typed: the verified on-chain transfer value is what gets credited.
+      const verified = await c.deps.depositVerificationService.verifyNativeDeposit({
         transactionHash,
         safeAddress: wallet.safeAddress,
-        amountWei,
         allowedSenders: await allowedSenders(c.deps, c.telegramUserId)
       });
       const analytics = await c.deps.poolService.creditDeposit({
         chatId: c.chatId,
         telegramUserId: c.telegramUserId,
-        amountWei,
+        amountWei: verified.amountWei,
         transactionHash
       });
       await c.reply(formatPoolAnalytics(analytics));

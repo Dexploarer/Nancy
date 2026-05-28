@@ -29,6 +29,23 @@ describe("DepositVerificationService", () => {
     expect(deposit.amountWei).toBe(100n);
   });
 
+  it("reads and returns the on-chain amount when none is supplied (lazy deposit)", async () => {
+    const service = new DepositVerificationService("https://rpc.example", 56, fakeClient({
+      from: linkedSender,
+      to: safeAddress,
+      value: 42n,
+      status: "success"
+    }));
+
+    const deposit = await service.verifyNativeDeposit({
+      transactionHash,
+      safeAddress,
+      allowedSenders: [linkedSender]
+    });
+
+    expect(deposit.amountWei).toBe(42n);
+  });
+
   it("rejects deposits from a sender not linked to the Telegram user", async () => {
     const service = new DepositVerificationService("https://rpc.example", 56, fakeClient({
       from: linkedSender,
