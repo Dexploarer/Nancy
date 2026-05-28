@@ -123,7 +123,18 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
     command: "safe_group",
     title: "Create a group Safe",
     adminOnly: true,
-    fields: [{ label: "Signature threshold (how many owners must approve)", example: "2", validate: (v) => void parsePositiveInteger(v, "threshold") }],
+    fields: [
+      {
+        label: "Signature threshold (how many owners must approve)",
+        example: "2",
+        validate: (v) => void parsePositiveInteger(v, "threshold"),
+        choices: [
+          { label: "1 (solo)", value: "1" },
+          { label: "2", value: "2" },
+          { label: "3", value: "3" }
+        ]
+      }
+    ],
     execute: async (c, values) => {
       await c.requireAdmin();
       const threshold = parsePositiveInteger(required(values, 0), "threshold");
