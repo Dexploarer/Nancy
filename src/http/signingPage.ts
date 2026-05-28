@@ -1,6 +1,7 @@
 import type { SafeSubmission } from "../domain/types.js";
+import { walletProviderScript } from "./walletProviderScript.js";
 
-export function renderSigningPage(submission: SafeSubmission): string {
+export function renderSigningPage(submission: SafeSubmission, walletConnectProjectId?: string): string {
   const submissionIdJson = JSON.stringify(submission.id);
   return `<!doctype html>
 <html lang="en">
@@ -35,7 +36,8 @@ export function renderSigningPage(submission: SafeSubmission): string {
     <button id="sign">Connect wallet, sign, and submit</button>
     <output id="output">Waiting for signature.</output>
   </main>
-  <script>
+  <script type="module">
+    ${walletProviderScript(walletConnectProjectId)}
     const submissionId = ${submissionIdJson};
     const button = document.getElementById("sign");
     const output = document.getElementById("output");
@@ -50,10 +52,6 @@ export function renderSigningPage(submission: SafeSubmission): string {
       }
     }
     button.addEventListener("click", async () => {
-      if (!window.ethereum) {
-        output.textContent = "No injected wallet found. Open this page in a wallet browser.";
-        return;
-      }
       const telegramUserId = telegramUserIdInput.value.trim();
       if (!/^\\d+$/.test(telegramUserId)) {
         output.textContent = "Enter your numeric Telegram user ID first.";
@@ -61,9 +59,10 @@ export function renderSigningPage(submission: SafeSubmission): string {
       }
       button.disabled = true;
       try {
-        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const provider = await getProvider();
+        const accounts = await provider.request({ method: "eth_requestAccounts" });
         const address = accounts[0];
-        const signature = await window.ethereum.request({
+        const signature = await provider.request({
           method: "personal_sign",
           params: [document.getElementById("hash").textContent, address]
         });

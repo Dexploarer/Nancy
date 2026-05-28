@@ -10,6 +10,14 @@ describe("renderSigningPage", () => {
     expect(html).toContain("fetch(");
     expect(html).not.toContain("/safe_submit");
   });
+
+  it("includes the WalletConnect provider when configured", () => {
+    expect(renderSigningPage(submission(), "proj_abc")).toContain("@walletconnect/ethereum-provider");
+  });
+
+  it("omits the WalletConnect provider when not configured", () => {
+    expect(renderSigningPage(submission(), undefined)).not.toContain("@walletconnect/ethereum-provider");
+  });
 });
 
 function submission(): SafeSubmission {

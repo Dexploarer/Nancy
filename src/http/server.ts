@@ -33,7 +33,7 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
       return Response.json({ ok: true });
     }
     if (request.method === "GET" && url.pathname.startsWith("/sign/")) {
-      return route(async () => renderSafeSigningPage(appState, url.pathname));
+      return route(async () => renderSafeSigningPage(appState, url.pathname, config.walletConnectProjectId));
     }
     if (request.method === "GET" && url.pathname.startsWith("/link/")) {
       return route(async () => renderWalletLinkPage(appState, url.pathname, config.walletConnectProjectId));
@@ -80,12 +80,12 @@ export async function startHttpRuntime(appState: App, config: AppConfig): Promis
   await appState.bot.start();
 }
 
-async function renderSafeSigningPage(appState: App, pathname: string): Promise<Response> {
+async function renderSafeSigningPage(appState: App, pathname: string, walletConnectProjectId?: string): Promise<Response> {
   const submission = await appState.safeSubmissionService.getSubmission(requiredPathSuffix(pathname, "/sign/"));
   if (submission === null) {
     return new Response("Safe submission not found", { status: 404 });
   }
-  return new Response(renderSigningPage(submission), {
+  return new Response(renderSigningPage(submission, walletConnectProjectId), {
     headers: { "Content-Type": "text/html; charset=utf-8" }
   });
 }
