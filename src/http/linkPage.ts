@@ -1,6 +1,7 @@
 import type { WalletLink } from "../domain/types.js";
 import { buildWalletLinkMessage } from "../services/walletLinkService.js";
 import { walletProviderScript } from "./walletProviderScript.js";
+import { BRAND_HEAD } from "./brand.js";
 
 export function renderLinkPage(link: WalletLink, walletConnectProjectId?: string, chainId?: number): string {
   const nonceJson = JSON.stringify(link.nonce);
@@ -12,6 +13,7 @@ export function renderLinkPage(link: WalletLink, walletConnectProjectId?: string
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  ${BRAND_HEAD}
   <title>The Family Wallet Link</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
@@ -89,6 +91,7 @@ export function renderLinkStartPage(walletConnectProjectId?: string, chainId?: n
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  ${BRAND_HEAD}
   <title>The Family Wallet Link</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>

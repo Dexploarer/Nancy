@@ -61,8 +61,16 @@ export function createBot(dependencies: BotDependencies): Bot {
   bot.command("start", async (ctx) => {
     await ctx.reply(
       [
-        "The Family group trading bot",
-        "Tap a button below for common flows, or open the command menu (the / icon) for the full list."
+        "💛 Hey sugar — Nancy here, the Golden Girl of Binance.",
+        "",
+        "I run your group's shared trading wallet: a Safe multisig the owners control. I never hold your keys.",
+        "",
+        "New here? Three taps to get going:",
+        "1️⃣ Generate wallet (or Link wallet) — your owner key",
+        "2️⃣ Create group Safe — collect owners, then deploy from your wallet",
+        "3️⃣ Init pool — then Deposit and watch your share grow",
+        "",
+        "Tap a button below, or open the command menu (the / icon) for everything."
       ].join("\n"),
       { reply_markup: mainMenuKeyboard() }
     );

@@ -1,5 +1,6 @@
 import type { Address } from "viem";
 import { walletProviderScript } from "./walletProviderScript.js";
+import { BRAND_HEAD } from "./brand.js";
 
 // Deploy-from-your-wallet page. The server builds the exact createProxyWithNonce
 // calldata for this session; the page sends it from the connected wallet (the user
@@ -22,6 +23,7 @@ export function renderDeployPage(input: {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  ${BRAND_HEAD}
   <title>The Family Safe Deploy</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>

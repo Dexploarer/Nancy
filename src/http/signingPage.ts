@@ -1,5 +1,6 @@
 import type { SafeSubmission } from "../domain/types.js";
 import { walletProviderScript } from "./walletProviderScript.js";
+import { BRAND_HEAD } from "./brand.js";
 
 export function renderSigningPage(submission: SafeSubmission, walletConnectProjectId?: string, chainId?: number): string {
   const submissionIdJson = JSON.stringify(submission.id);
@@ -8,6 +9,7 @@ export function renderSigningPage(submission: SafeSubmission, walletConnectProje
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  ${BRAND_HEAD}
   <title>The Family Safe Signature</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
