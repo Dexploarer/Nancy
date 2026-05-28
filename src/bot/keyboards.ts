@@ -12,6 +12,8 @@ export function mainMenuKeyboard(): InlineKeyboard {
     .text("Init pool", "menu:pool_init")
     .text("Pool analytics", "menu:pool")
     .row()
+    .text("My status", "menu:my_status")
+    .row()
     .text("Deposit", "menu:pool_deposit")
     .text("Withdraw", "menu:pool_withdraw")
     .row()

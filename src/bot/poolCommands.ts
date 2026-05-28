@@ -178,6 +178,17 @@ export function formatPoolAnalytics(analytics: PoolAnalytics): string {
   ].join("\n");
 }
 
+export function formatMyStatus(analytics: PoolAnalytics): string {
+  return [
+    "Your pool status",
+    `Role: ${analytics.member.role}`,
+    `Ownership: ${formatBps(analytics.member.ownershipBps)}`,
+    `Active value: ${formatBnb(analytics.member.activeValueWei)}`,
+    `Queued withdrawals: ${formatBnb(analytics.member.queuedWithdrawalWei)}`,
+    `PnL after fees: ${formatBnb(analytics.member.unrealizedPnlWei)}`
+  ].join("\n");
+}
+
 export function formatWithdrawalRequest(request: PoolWithdrawalRequest): string {
   return [
     `Withdrawal request ${request.id}`,
