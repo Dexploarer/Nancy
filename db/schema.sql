@@ -152,3 +152,12 @@ create table if not exists pool_withdrawal_requests (
 
 create index if not exists pool_withdrawal_requests_chat_status_idx
   on pool_withdrawal_requests(chat_id, status, requested_at desc);
+
+create table if not exists usage_events (
+  id text primary key,
+  command text not null,
+  telegram_user_id text not null,
+  created_at timestamptz not null
+);
+
+create index if not exists usage_events_created_at_idx on usage_events(created_at desc);

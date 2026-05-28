@@ -39,6 +39,8 @@ export type PlatformStats = {
   totalTvlWei: bigint;
   depositVolume24hWei: bigint;
   withdrawalVolume24hWei: bigint;
+  dau24h: number;
+  topCommands: { command: string; count: number }[];
 };
 
 export class PoolService {
@@ -365,7 +367,25 @@ export class PoolService {
         }
       }
     }
-    return { groups: wallets.length, totalMembers, totalTvlWei, depositVolume24hWei, withdrawalVolume24hWei };
+    const usage = await this.repository.listUsageEventsSince(new Date(cutoff));
+    const dau24h = new Set(usage.map((event) => event.telegramUserId)).size;
+    const counts = new Map<string, number>();
+    for (const event of usage) {
+      counts.set(event.command, (counts.get(event.command) ?? 0) + 1);
+    }
+    const topCommands = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([command, count]) => ({ command, count }));
+    return {
+      groups: wallets.length,
+      totalMembers,
+      totalTvlWei,
+      depositVolume24hWei,
+      withdrawalVolume24hWei,
+      dau24h,
+      topCommands
+    };
   }
 
   async getWithdrawalTransactions(chatId: ChatId, requestId: string, feeRecipient: Address): Promise<ChainTransaction[]> {

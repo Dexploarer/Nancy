@@ -159,6 +159,13 @@ export type PoolMember = {
   updatedAt: Date;
 };
 
+export type UsageEvent = {
+  id: string;
+  command: string;
+  telegramUserId: string;
+  createdAt: Date;
+};
+
 export type PoolLedgerEntryType =
   | "deposit"
   | "withdrawal-request"

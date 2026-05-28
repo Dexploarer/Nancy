@@ -28,6 +28,7 @@ import { DepositVerificationService } from "../services/depositVerificationServi
 import { flapLaunchKeyboard, helpText, linkPageKeyboard, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard, tradeProposalKeyboard } from "./keyboards.js";
 import { registerSafeCallbacks } from "./safeCallbacks.js";
 import { registerPoolCommands } from "./poolCommands.js";
+import { createId } from "../utils/ids.js";
 import { beginUnlink, handleMenuSelection, handlePromptBack, handlePromptCancel, handlePromptChoice, routePromptInput } from "./promptController.js";
 import {
   emptyToUndefined,
@@ -57,6 +58,20 @@ export type BotDependencies = {
 
 export function createBot(dependencies: BotDependencies): Bot {
   const bot = new Bot(dependencies.config.telegramBotToken);
+
+  // Lightweight usage telemetry: record slash commands and menu taps (best-effort).
+  bot.use(async (ctx, next) => {
+    const label = usageLabel(ctx);
+    const userId = ctx.from?.id?.toString();
+    if (label !== null && userId !== undefined) {
+      try {
+        await dependencies.repository.saveUsageEvent({ id: createId("usage"), command: label, telegramUserId: userId, createdAt: new Date() });
+      } catch (error) {
+        Logger.warn("[Usage] failed to record event", { err: error instanceof Error ? error : undefined });
+      }
+    }
+    await next();
+  });
 
   bot.command("start", async (ctx) => {
     await ctx.reply(
@@ -411,4 +426,17 @@ async function handleCallback(ctx: Context, action: () => Promise<void>): Promis
     Logger.error("[TelegramBot] Callback failed", { err: error instanceof Error ? error : undefined });
     await ctx.answerCallbackQuery({ text: "Action failed", show_alert: true });
   }
+}
+
+// Normalises an update into a usage label: a slash command (without args/@bot) or a menu tap.
+function usageLabel(ctx: Context): string | null {
+  const text = ctx.message?.text;
+  if (text !== undefined && text.startsWith("/")) {
+    return text.slice(1).split(/\s+/)[0]?.split("@")[0] ?? null;
+  }
+  const data = ctx.callbackQuery?.data;
+  if (data !== undefined && data.startsWith("menu:")) {
+    return `menu:${data.slice("menu:".length)}`;
+  }
+  return null;
 }

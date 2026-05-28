@@ -6,6 +6,7 @@ import type {
   SafeCreationSession,
   SafeSubmission,
   TradeProposal,
+  UsageEvent,
   WalletLink
 } from "../domain/types.js";
 import type { Repository } from "./repository.js";
@@ -18,6 +19,7 @@ export class MemoryRepository implements Repository {
   private readonly tradeProposals = new Map<string, TradeProposal>();
   private readonly flapLaunches = new Map<string, FlapLaunchProposal>();
   private readonly safeSubmissions = new Map<string, SafeSubmission>();
+  private readonly usageEvents: UsageEvent[] = [];
 
   async getGroupWallet(chatId: ChatId): Promise<GroupWallet | null> {
     return this.groupWallets.get(chatId) ?? null;
@@ -99,6 +101,14 @@ export class MemoryRepository implements Repository {
 
   async saveSafeSubmission(submission: SafeSubmission): Promise<void> {
     this.safeSubmissions.set(submission.id, submission);
+  }
+
+  async saveUsageEvent(event: UsageEvent): Promise<void> {
+    this.usageEvents.push(event);
+  }
+
+  async listUsageEventsSince(since: Date): Promise<UsageEvent[]> {
+    return this.usageEvents.filter((event) => event.createdAt >= since);
   }
 }
 

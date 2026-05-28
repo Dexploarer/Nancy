@@ -6,6 +6,7 @@ import type {
   SafeCreationSession,
   SafeSubmission,
   TradeProposal,
+  UsageEvent,
   WalletLink
 } from "../domain/types.js";
 
@@ -30,4 +31,6 @@ export interface Repository {
   saveFlapLaunch(proposal: FlapLaunchProposal): Promise<void>;
   getSafeSubmission(id: string): Promise<SafeSubmission | null>;
   saveSafeSubmission(submission: SafeSubmission): Promise<void>;
+  saveUsageEvent(event: UsageEvent): Promise<void>;
+  listUsageEventsSince(since: Date): Promise<UsageEvent[]>;
 }

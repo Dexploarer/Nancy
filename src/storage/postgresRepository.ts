@@ -8,6 +8,7 @@ import type {
   SafeCreationSession,
   SafeSubmission,
   TradeProposal,
+  UsageEvent,
   WalletLink
 } from "../domain/types.js";
 import type { Repository } from "./repository.js";
@@ -405,5 +406,25 @@ export class PostgresRepository implements Repository {
         submission.createdAt
       ]
     );
+  }
+
+  async saveUsageEvent(event: UsageEvent): Promise<void> {
+    await this.pool.query(
+      "insert into usage_events(id, command, telegram_user_id, created_at) values ($1, $2, $3, $4)",
+      [event.id, event.command, event.telegramUserId, event.createdAt]
+    );
+  }
+
+  async listUsageEventsSince(since: Date): Promise<UsageEvent[]> {
+    const result = await this.pool.query<{ id: string; command: string; telegram_user_id: string; created_at: Date }>(
+      "select id, command, telegram_user_id, created_at from usage_events where created_at >= $1",
+      [since]
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      command: row.command,
+      telegramUserId: row.telegram_user_id,
+      createdAt: row.created_at
+    }));
   }
 }

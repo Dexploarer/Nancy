@@ -229,7 +229,11 @@ export function formatPlatformStats(stats: PlatformStats): string {
     `Members: ${stats.totalMembers}`,
     `Total TVL: ${formatBnb(stats.totalTvlWei)}`,
     `24h deposits: ${formatBnb(stats.depositVolume24hWei)}`,
-    `24h withdrawals: ${formatBnb(stats.withdrawalVolume24hWei)}`
+    `24h withdrawals: ${formatBnb(stats.withdrawalVolume24hWei)}`,
+    `Active users (24h): ${stats.dau24h}`,
+    stats.topCommands.length === 0
+      ? "Top commands (24h): none yet"
+      : `Top commands (24h): ${stats.topCommands.map((entry) => `${entry.command} (${entry.count})`).join(", ")}`
   ].join("\n");
 }
 

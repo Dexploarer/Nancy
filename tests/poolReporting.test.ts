@@ -70,10 +70,15 @@ describe("PoolService reporting", () => {
       createdAt: now
     });
 
+    await repository.saveUsageEvent({ id: "e1", command: "start", telegramUserId: "u1", createdAt: now });
+    await repository.saveUsageEvent({ id: "e2", command: "start", telegramUserId: "u2", createdAt: now });
+
     const stats = await service.buildPlatformStats();
     expect(stats.groups).toBe(2);
     expect(stats.totalMembers).toBe(2);
     expect(stats.totalTvlWei).toBe(150n);
     expect(stats.depositVolume24hWei).toBe(30n);
+    expect(stats.dau24h).toBe(2);
+    expect(stats.topCommands).toEqual([{ command: "start", count: 2 }]);
   });
 });
