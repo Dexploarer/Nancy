@@ -25,7 +25,7 @@ import { SafeDeploymentService } from "../services/safeDeploymentService.js";
 import { SafeGroupSetupService } from "../services/safeGroupSetupService.js";
 import { PoolService } from "../services/poolService.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
-import { helpText, linkPageKeyboard, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
+import { flapLaunchKeyboard, helpText, linkPageKeyboard, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard, tradeProposalKeyboard } from "./keyboards.js";
 import { registerSafeCallbacks } from "./safeCallbacks.js";
 import { registerPoolCommands } from "./poolCommands.js";
 import { beginUnlink, handleMenuSelection, handlePromptBack, handlePromptCancel, routePromptInput } from "./promptController.js";
@@ -202,7 +202,7 @@ export function createBot(dependencies: BotDependencies): Bot {
         feeRecipient: dependencies.config.platformFeeRecipient,
         dexDeadlineSeconds: dependencies.config.dexDeadlineSeconds
       });
-      await ctx.reply(formatTradeProposal(proposal));
+      await ctx.reply(formatTradeProposal(proposal), { reply_markup: tradeProposalKeyboard(proposal.id) });
     });
   });
 
@@ -214,7 +214,7 @@ export function createBot(dependencies: BotDependencies): Bot {
       if (proposal === null) {
         throw new UserInputError("Proposal not found", { id: proposalId });
       }
-      await ctx.reply(formatTradeProposal(proposal));
+      await ctx.reply(formatTradeProposal(proposal), { reply_markup: tradeProposalKeyboard(proposal.id) });
     });
   });
 
@@ -249,7 +249,7 @@ export function createBot(dependencies: BotDependencies): Bot {
         salt: createFlapSalt(),
         commissionReceiver: dependencies.config.platformCommissionReceiver
       });
-      await ctx.reply(formatFlapLaunch(proposal));
+      await ctx.reply(formatFlapLaunch(proposal), { reply_markup: flapLaunchKeyboard(proposal.id) });
     });
   });
 

@@ -13,7 +13,7 @@ import { parsePositiveInteger } from "./commandUtils.js";
 import { createFlapSalt, parseVaultRecipients } from "../chain/flapService.js";
 import { formatFlapLaunch, formatSafeCreationSession, formatSafeStatus, formatSafeSubmission, formatTradeProposal } from "./formatters.js";
 import { formatPoolAnalytics, formatWithdrawalRequest } from "./poolCommands.js";
-import { linkPageKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
+import { flapLaunchKeyboard, linkPageKeyboard, safeGroupKeyboard, safeSubmissionKeyboard, tradeProposalKeyboard, withdrawalKeyboard } from "./keyboards.js";
 import type { BotDependencies } from "./bot.js";
 
 export type PromptReply = (text: string, keyboard?: InlineKeyboard) => Promise<void>;
@@ -147,7 +147,7 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
         feeRecipient: c.deps.config.platformFeeRecipient,
         dexDeadlineSeconds: c.deps.config.dexDeadlineSeconds
       });
-      await c.reply(formatTradeProposal(proposal));
+      await c.reply(formatTradeProposal(proposal), tradeProposalKeyboard(proposal.id));
     }
   },
   pool_role: {
@@ -239,7 +239,7 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
         recipientAddress,
         withdrawalBps
       });
-      await c.reply(formatWithdrawalRequest(request));
+      await c.reply(formatWithdrawalRequest(request), withdrawalKeyboard(request.id));
     }
   },
   pool_cancel: {
@@ -272,7 +272,7 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
       if (proposal === null) {
         throw new UserInputError("Proposal not found.");
       }
-      await c.reply(formatTradeProposal(proposal));
+      await c.reply(formatTradeProposal(proposal), tradeProposalKeyboard(proposal.id));
     }
   },
   safe_prepare: {
@@ -367,7 +367,7 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
         salt: createFlapSalt(),
         commissionReceiver: c.deps.config.platformCommissionReceiver
       });
-      await c.reply(formatFlapLaunch(proposal));
+      await c.reply(formatFlapLaunch(proposal), flapLaunchKeyboard(proposal.id));
     }
   }
 };

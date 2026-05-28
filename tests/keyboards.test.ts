@@ -1,5 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import { connectWalletKeyboard, deployPageKeyboard, linkPageKeyboard, poolAppKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "../src/bot/keyboards.js";
+import {
+  connectWalletKeyboard,
+  deployPageKeyboard,
+  flapLaunchKeyboard,
+  linkPageKeyboard,
+  poolAppKeyboard,
+  safeGroupKeyboard,
+  safeSubmissionKeyboard,
+  tradeProposalKeyboard,
+  withdrawalKeyboard
+} from "../src/bot/keyboards.js";
 
 type Btn = { text: string; url?: string; web_app?: { url: string } };
 function buttons(kb: { inline_keyboard: Btn[][] }): Btn[] {
@@ -62,5 +72,31 @@ describe("page-open keyboards", () => {
   it("deploy button points at the deploy page for the session", () => {
     const b = buttons(deployPageKeyboard("setup_1", "https://x.test", false))[0]!;
     expect(b.url).toBe("https://x.test/deploy/setup_1");
+  });
+});
+
+describe("result action keyboards (no ID typing)", () => {
+  function data(kb: { inline_keyboard: { text: string; callback_data?: string }[][] }): string[] {
+    return kb.inline_keyboard.flat().map((b) => b.callback_data ?? "");
+  }
+
+  it("trade proposal offers Prepare Safe tx carrying the id", () => {
+    expect(data(tradeProposalKeyboard("trade_1"))).toContain("prepare:trade:trade_1");
+  });
+
+  it("flap launch offers Prepare Safe tx carrying the id", () => {
+    expect(data(flapLaunchKeyboard("flap_1"))).toContain("prepare:flap:flap_1");
+  });
+
+  it("withdrawal offers Prepare and Cancel carrying the id", () => {
+    const d = data(withdrawalKeyboard("wd_1"));
+    expect(d).toContain("prepare:withdrawal:wd_1");
+    expect(d).toContain("wd_cancel:wd_1");
+  });
+
+  it("safe submission offers status + execute alongside the sign button", () => {
+    const d = data(safeSubmissionKeyboard("safe_1", "https://x.test", false));
+    expect(d).toContain("safe_status:safe_1");
+    expect(d).toContain("safe_execute:safe_1");
   });
 });

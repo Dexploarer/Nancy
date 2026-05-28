@@ -85,7 +85,23 @@ export function connectWalletKeyboard(publicBaseUrl: string | undefined): Inline
 }
 
 export function safeSubmissionKeyboard(submissionId: string, publicBaseUrl: string | undefined, preferWebApp: boolean): InlineKeyboard {
-  return pageOpenButton("Open & sign", `${baseUrl(publicBaseUrl)}/sign/${encodeURIComponent(submissionId)}`, preferWebApp);
+  return pageOpenButton("Open & sign", `${baseUrl(publicBaseUrl)}/sign/${encodeURIComponent(submissionId)}`, preferWebApp)
+    .row()
+    .text("Check status", `safe_status:${submissionId}`)
+    .text("Execute", `safe_execute:${submissionId}`);
+}
+
+// P2 action buttons: every result message carries the next step, so nobody copies an ID.
+export function tradeProposalKeyboard(proposalId: string): InlineKeyboard {
+  return new InlineKeyboard().text("Prepare Safe tx", `prepare:trade:${proposalId}`);
+}
+
+export function flapLaunchKeyboard(launchId: string): InlineKeyboard {
+  return new InlineKeyboard().text("Prepare Safe tx", `prepare:flap:${launchId}`);
+}
+
+export function withdrawalKeyboard(requestId: string): InlineKeyboard {
+  return new InlineKeyboard().text("Prepare Safe tx", `prepare:withdrawal:${requestId}`).text("Cancel", `wd_cancel:${requestId}`);
 }
 
 // Deploy-from-your-wallet button: opens the page that sends the deploy tx from the

@@ -9,7 +9,7 @@ import { PoolService } from "../services/poolService.js";
 import { WalletLinkService } from "../services/walletLinkService.js";
 import { formatBnb, parseAddress, parseBasisPoints, parseBnbAmount, parseNonNegativeBnbAmount, parseTransactionHash } from "../utils/evm.js";
 import { handleUserCommand, parsePositiveInteger, requireChatId, requireGroupAdmin, requiredPart, requireTelegramUserId, splitCommand } from "./commandUtils.js";
-import { poolAppKeyboard } from "./keyboards.js";
+import { poolAppKeyboard, withdrawalKeyboard } from "./keyboards.js";
 
 export type PoolCommandDependencies = {
   groupWalletService: GroupWalletService;
@@ -118,7 +118,7 @@ export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependen
         recipientAddress,
         withdrawalBps
       });
-      await ctx.reply(formatWithdrawalRequest(request));
+      await ctx.reply(formatWithdrawalRequest(request), { reply_markup: withdrawalKeyboard(request.id) });
     });
   });
 

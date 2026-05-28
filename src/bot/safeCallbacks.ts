@@ -1,8 +1,8 @@
 import type { Bot, Context } from "grammy";
 import { AppError, UserInputError } from "../domain/errors.js";
 import { Logger } from "../logger.js";
-import { formatGeneratedWallet, formatSafeCreationSession } from "./formatters.js";
-import { deployPageKeyboard, safeGroupKeyboard } from "./keyboards.js";
+import { formatGeneratedWallet, formatSafeCreationSession, formatSafeStatus, formatSafeSubmission } from "./formatters.js";
+import { deployPageKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
 import { requireChatId, requireGroupAdmin, requireTelegramUserId } from "./commandUtils.js";
 import type { BotDependencies } from "./bot.js";
 
@@ -76,6 +76,55 @@ export function registerSafeCallbacks(bot: Bot, dependencies: BotDependencies): 
       await ctx.editMessageText(
         `Group Safe ${wallet.safeAddress} unlinked. Set a new one with /safe_group <threshold> or /wallet_set.`
       );
+    });
+  });
+
+  // P2: act on a proposal / withdrawal / submission straight from its message — no IDs to copy.
+  bot.callbackQuery(/^prepare:/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      const rest = ctx.callbackQuery.data.slice("prepare:".length);
+      const separator = rest.indexOf(":");
+      const source = rest.slice(0, separator);
+      const sourceId = rest.slice(separator + 1);
+      const submission =
+        source === "trade"
+          ? await dependencies.safeSubmissionService.prepareTradeSubmission(chatId, sourceId)
+          : source === "flap"
+            ? await dependencies.safeSubmissionService.prepareFlapLaunchSubmission(chatId, sourceId)
+            : await dependencies.safeSubmissionService.prepareWithdrawalSubmission(chatId, sourceId);
+      await ctx.answerCallbackQuery();
+      await ctx.reply(formatSafeSubmission(submission), {
+        reply_markup: safeSubmissionKeyboard(submission.id, dependencies.config.publicBaseUrl, ctx.chat?.type === "private")
+      });
+    });
+  });
+
+  bot.callbackQuery(/^safe_status:/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const status = await dependencies.safeSubmissionService.getStatus(ctx.callbackQuery.data.slice("safe_status:".length));
+      await ctx.answerCallbackQuery();
+      await ctx.reply(formatSafeStatus(status));
+    });
+  });
+
+  bot.callbackQuery(/^safe_execute:/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
+      const txHash = await dependencies.safeSubmissionService.execute(ctx.callbackQuery.data.slice("safe_execute:".length));
+      await ctx.answerCallbackQuery({ text: "Execution submitted" });
+      await ctx.reply(`Safe execution submitted: ${txHash}`);
+    });
+  });
+
+  bot.callbackQuery(/^wd_cancel:/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const request = await dependencies.poolService.cancelWithdrawal(chatId, ctx.callbackQuery.data.slice("wd_cancel:".length), fromId);
+      await ctx.answerCallbackQuery({ text: "Withdrawal cancelled" });
+      await ctx.reply(`Withdrawal ${request.id} cancelled. Your ${request.shares.toString()} shares were restored.`);
     });
   });
 }
