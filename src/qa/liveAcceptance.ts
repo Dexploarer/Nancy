@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getBscContractAddresses } from "../chain/addresses.js";
 import { AppError } from "../domain/errors.js";
 import { Logger } from "../logger.js";
+import { assertHttpOk } from "./httpChecks.js";
 
 const EnvSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
@@ -28,11 +29,24 @@ await assertContractCode("Safe proxy factory", addresses.safeProxyFactory);
 await assertContractCode("Safe MultiSendCallOnly", addresses.multiSendCallOnly);
 await assertContractCode("Flap portal", addresses.portal);
 await assertContractCode("Flap vault portal", addresses.vaultPortal);
-await assertHttpOk(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe`, "Telegram getMe");
-await assertHttpOk(`${env.SAFE_TRANSACTION_SERVICE_URL.replace(/\/$/, "")}/api/v1/about/`, "Safe Transaction Service");
+await assertHttpOk({
+  url: `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe`,
+  label: "Telegram getMe",
+  errorMessage: "External service check failed"
+});
+await assertHttpOk({
+  url: `${env.SAFE_TRANSACTION_SERVICE_URL.replace(/\/$/, "")}/api/v1/about/`,
+  label: "Safe Transaction Service",
+  errorMessage: "External service check failed"
+});
 if (env.PINATA_JWT !== undefined) {
-  await assertHttpOk("https://api.pinata.cloud/data/testAuthentication", "Pinata auth", {
-    Authorization: `Bearer ${env.PINATA_JWT}`
+  await assertHttpOk({
+    url: "https://api.pinata.cloud/data/testAuthentication",
+    label: "Pinata auth",
+    errorMessage: "External service check failed",
+    headers: {
+      Authorization: `Bearer ${env.PINATA_JWT}`
+    }
   });
 }
 
@@ -61,12 +75,5 @@ async function assertContractCode(label: string, address: Address): Promise<void
   const code = await client.getBytecode({ address });
   if (code === undefined || code === "0x") {
     throw new AppError("Contract code missing", { label, address });
-  }
-}
-
-async function assertHttpOk(url: string, label: string, headers: Record<string, string> = {}): Promise<void> {
-  const response = await fetch(url, { headers: { Accept: "application/json", ...headers } });
-  if (!response.ok) {
-    throw new AppError("External service check failed", { label, status: response.status });
   }
 }

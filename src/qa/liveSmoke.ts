@@ -16,6 +16,7 @@ import {
   BOT_SHORT_DESCRIPTION
 } from "../bot/telegramCommands.js";
 import { parseAddress } from "../utils/evm.js";
+import { assertHttpOk } from "./httpChecks.js";
 
 const BSC_USDT: Address = "0x55d398326f99059fF775485246999027B3197955";
 
@@ -118,7 +119,11 @@ async function checkSafeTransactionService(input: AppConfig): Promise<void> {
     skip("Safe Transaction Service", "SAFE_TRANSACTION_SERVICE_URL is not configured");
     return;
   }
-  await assertHttpOk(`${input.safeTransactionServiceUrl.replace(/\/$/, "")}/api/v1/about/`, "Safe Transaction Service");
+  await assertHttpOk({
+    url: `${input.safeTransactionServiceUrl.replace(/\/$/, "")}/api/v1/about/`,
+    label: "Safe Transaction Service",
+    errorMessage: "HTTP smoke check failed"
+  });
   pass("Safe Transaction Service", input.safeTransactionServiceUrl);
 }
 
@@ -146,7 +151,11 @@ async function checkPublicHttp(input: AppConfig): Promise<void> {
   if (input.appEnv === "production" && parsed.protocol !== "https:") {
     throw new AppError("Production PUBLIC_BASE_URL must be HTTPS for Telegram Mini Apps", { publicBaseUrl: baseUrl });
   }
-  await assertHttpOk(`${baseUrl}/health`, "HTTP health");
+  await assertHttpOk({
+    url: `${baseUrl}/health`,
+    label: "HTTP health",
+    errorMessage: "HTTP smoke check failed"
+  });
   const poolPage = await fetch(`${baseUrl}/pool/live-smoke`);
   if (!poolPage.ok) {
     throw new AppError("Pool mini app page failed", { status: poolPage.status });
@@ -178,8 +187,13 @@ async function checkPinata(input: AppConfig): Promise<void> {
     skip("Pinata metadata upload", "upload smoke is not run without PINATA_JWT and explicit upload approval");
     return;
   }
-  await assertHttpOk("https://api.pinata.cloud/data/testAuthentication", "Pinata auth", {
-    Authorization: `Bearer ${input.pinataJwt}`
+  await assertHttpOk({
+    url: "https://api.pinata.cloud/data/testAuthentication",
+    label: "Pinata auth",
+    errorMessage: "HTTP smoke check failed",
+    headers: {
+      Authorization: `Bearer ${input.pinataJwt}`
+    }
   });
   pass("Pinata auth", "JWT accepted");
   skip("Pinata metadata upload", "auth is checked; upload is not run to avoid creating third-party artifacts");
@@ -196,13 +210,6 @@ async function checkExecutorFunding(input: AppConfig): Promise<void> {
     throw new AppError("Safe executor gas wallet has zero native balance", { address: account.address });
   }
   pass("Safe executor gas wallet", `${account.address} balance=${balance.toString()}`);
-}
-
-async function assertHttpOk(url: string, name: string, headers: Record<string, string> = {}): Promise<void> {
-  const response = await fetch(url, { headers: { Accept: "application/json", ...headers } });
-  if (!response.ok) {
-    throw new AppError("HTTP smoke check failed", { name, status: response.status });
-  }
 }
 
 function pass(name: string, detail: string): void {

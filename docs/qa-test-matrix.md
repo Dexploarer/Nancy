@@ -48,6 +48,28 @@ Covered:
 - Pinata auth when `PINATA_JWT` is configured.
 - Executor gas wallet balance when `SAFE_EXECUTOR_PRIVATE_KEY` is configured.
 
+## Full deterministic simulation
+
+Run:
+
+```bash
+bun run sim:full
+```
+
+Covered without live spend:
+
+- Telegram group Safe creation using managed owner wallets and a 2-of-2 threshold.
+- Safe deployment through a simulated SafeProxyFactory response.
+- Deposit receipt verification through simulated BSC transaction/receipt data.
+- Pool deposits that produce 10% / 30% / 60% ownership.
+- Trader role authorization and member trade rejection.
+- Trade proposal Safe preparation, first owner proposal, failed execution before threshold, second owner confirmation, and simulated execution.
+- NAV profit update from 100 BNB to 150 BNB with 90 BNB liquid and 60 BNB open positions.
+- 50% member withdrawal while positions remain open.
+- Withdrawal share burn, queued gross claim, 25 bps withdrawal fee, net payout, Safe threshold approval, execution, final NAV, and final PnL.
+
+The simulation uses production service code with fake external surfaces for deployment, Safe Transaction Service, and BSC deposit receipts. It is deterministic and no-spend.
+
 ## Full verification
 
 Run:
@@ -56,7 +78,7 @@ Run:
 bun run verify:full
 ```
 
-This runs local verification, build, live acceptance, and live smoke.
+This runs local verification, build, full deterministic simulation, live acceptance, and live smoke.
 
 ## Not fully automated
 

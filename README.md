@@ -28,6 +28,7 @@ This MVP does not deploy a custom vault contract. Custody remains in the group S
 bun install
 cp .env.example .env
 bun run verify
+bun run sim:full
 bun run dev
 ```
 
