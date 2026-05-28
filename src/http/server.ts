@@ -168,10 +168,12 @@ async function createWalletLink(appState: App, config: AppConfig, request: Reque
 }
 
 // Verify a Safe an owner deployed from their own wallet, then link it to the group.
-async function submitSafeDeployment(appState: App, config: AppConfig, request: Request, pathname: string): Promise<Response> {
+// No Telegram identity is required: the on-chain calldata-match verification is the
+// security boundary, so only a correct deployment (matching the session's owners and
+// threshold) can ever be linked, regardless of who submits the hash.
+async function submitSafeDeployment(appState: App, _config: AppConfig, request: Request, pathname: string): Promise<Response> {
   const sessionId = requiredPathSuffix(pathname, "/api/safe-deployments/");
   const payload = await parseSafeDeploymentBody(request);
-  resolveTelegramUserIdFromBody(payload, config);
   const session = await appState.safeGroupSetupService.getSession(sessionId);
   const owners = session.owners.map((owner) => owner.address);
   const transactionHash = parseHex(payload.transactionHash, "transactionHash");
