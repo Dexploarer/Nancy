@@ -24,6 +24,8 @@ export type PromptContext = {
   telegramUserId: string;
   reply: PromptReply;
   requireAdmin: () => Promise<void>;
+  // Resolves a member's @username live from Telegram (no persistence); null if none.
+  usernameFor: (userId: string) => Promise<string | null>;
 };
 
 export type PromptChoice = { label: string; value: string };
@@ -184,10 +186,15 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
         example: "123456789",
         validate: (v) => void parsePositiveInteger(v, "telegramUserId"),
         choices: async (c) =>
-          (await c.deps.poolService.listMembers(c.chatId)).map((member) => ({
-            label: `${member.role}: ${member.telegramUserId}`,
-            value: member.telegramUserId
-          }))
+          Promise.all(
+            (await c.deps.poolService.listMembers(c.chatId)).map(async (member) => {
+              const username = await c.usernameFor(member.telegramUserId);
+              return {
+                label: username === null ? `${member.role}: ${member.telegramUserId}` : `@${username} (${member.role})`,
+                value: member.telegramUserId
+              };
+            })
+          )
       },
       {
         label: "Role: owner, trader, or member",

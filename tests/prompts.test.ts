@@ -139,6 +139,7 @@ describe("routePromptInput", () => {
         ? await field.choices({
             chatId: CHAT,
             telegramUserId: USER,
+            usernameFor: async () => null,
             deps: { poolService: { listMembers: async () => [{ telegramUserId: "222", role: "member" }] } }
           } as never)
         : (field.choices ?? []);

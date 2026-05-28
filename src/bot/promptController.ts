@@ -27,7 +27,15 @@ function buildContext(deps: BotDependencies, ctx: Context, chatId: string, teleg
     reply: async (text, keyboard) => {
       await ctx.reply(text, keyboard === undefined ? undefined : { reply_markup: keyboard });
     },
-    requireAdmin: () => requireGroupAdmin(ctx, chatId)
+    requireAdmin: () => requireGroupAdmin(ctx, chatId),
+    usernameFor: async (userId: string) => {
+      try {
+        const member = await ctx.api.getChatMember(Number(chatId), Number(userId));
+        return member.user.username ?? null;
+      } catch {
+        return null;
+      }
+    }
   };
 }
 
