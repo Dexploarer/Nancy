@@ -49,6 +49,20 @@ if (!linkPage.includes("/api/wallet-links/") || !linkPage.includes("personal_sig
   throw new AppError("Link page does not submit a personal_sign through the HTTP API");
 }
 
+const wcLinkPage = renderLinkPage(
+  {
+    telegramUserId: "123",
+    address: "0x1111111111111111111111111111111111111111",
+    nonce: "static-acceptance-nonce",
+    status: "pending",
+    createdAt: new Date("2026-05-27T00:00:00.000Z")
+  },
+  "static-acceptance-project"
+);
+if (!wcLinkPage.includes("@walletconnect/ethereum-provider") || !wcLinkPage.includes("static-acceptance-project")) {
+  throw new AppError("Link page is missing WalletConnect wiring when a project id is configured");
+}
+
 Logger.info("[StaticAcceptance] Static acceptance checks passed", {
   safeProxyFactory: addresses.safeProxyFactory,
   safeSingleton: addresses.safeSingleton
