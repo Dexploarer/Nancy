@@ -3,7 +3,7 @@ import { UserInputError } from "../domain/errors.js";
 import type { ChatId, GroupWallet, SafeCreationSession } from "../domain/types.js";
 import type { Repository } from "../storage/repository.js";
 import { createId } from "../utils/ids.js";
-import { ManagedWalletService, type GeneratedManagedWallet } from "./managedWalletService.js";
+import { WalletLinkService, type GeneratedWallet } from "./walletLinkService.js";
 import { SafeDeploymentService, type SafeDeployment } from "./safeDeploymentService.js";
 
 export type SafeGroupDeployment = {
@@ -16,7 +16,7 @@ export class SafeGroupSetupService {
   constructor(
     private readonly repository: Repository,
     private readonly safeDeploymentService: SafeDeploymentService,
-    private readonly managedWalletService: ManagedWalletService
+    private readonly walletLinkService: WalletLinkService
   ) {}
 
   async createSession(chatId: ChatId, creatorTelegramId: string, threshold: number): Promise<SafeCreationSession> {
@@ -39,7 +39,7 @@ export class SafeGroupSetupService {
   async joinWithDefaultWallet(sessionId: string, telegramUserId: string): Promise<SafeCreationSession> {
     const linkedWallets = await this.repository.getLinkedWalletsByTelegramUserId(telegramUserId);
     if (linkedWallets.length === 0) {
-      throw new UserInputError("Link a wallet first with /link_start and /link_submit");
+      throw new UserInputError("Generate one with /wallet_generate (in a DM) or link one with /link_start.");
     }
     if (linkedWallets.length > 1) {
       throw new UserInputError(`Multiple linked wallets found. Use /safe_group_join ${sessionId} <ownerAddress>`);
@@ -51,13 +51,13 @@ export class SafeGroupSetupService {
     return this.joinWithWallet(sessionId, telegramUserId, link.address);
   }
 
-  async generateManagedWalletAndJoin(sessionId: string, telegramUserId: string): Promise<{
-    generated: GeneratedManagedWallet;
+  async generateWalletAndJoin(sessionId: string, telegramUserId: string): Promise<{
+    generated: GeneratedWallet;
     session: SafeCreationSession;
   }> {
     await this.getCollectingSession(sessionId);
-    const generated = await this.managedWalletService.generate(telegramUserId);
-    const session = await this.joinWithWallet(sessionId, telegramUserId, generated.wallet.address);
+    const generated = await this.walletLinkService.generateLinkedWallet(telegramUserId);
+    const session = await this.joinWithWallet(sessionId, telegramUserId, generated.link.address);
     return { generated, session };
   }
 
@@ -109,6 +109,13 @@ export class SafeGroupSetupService {
     await this.repository.saveGroupWallet(wallet);
     await this.repository.saveSafeCreationSession(updated);
     return { session: updated, wallet, deployment };
+  }
+
+  async cancelSession(sessionId: string): Promise<SafeCreationSession> {
+    const session = await this.getCollectingSession(sessionId);
+    const cancelled: SafeCreationSession = { ...session, status: "cancelled" };
+    await this.repository.saveSafeCreationSession(cancelled);
+    return cancelled;
   }
 
   async getSession(sessionId: string): Promise<SafeCreationSession> {

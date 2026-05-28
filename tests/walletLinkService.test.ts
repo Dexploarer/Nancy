@@ -16,4 +16,18 @@ describe("WalletLinkService", () => {
     expect(completed.status).toBe("linked");
     await expect(service.requireLinkedOwner("123", account.address)).resolves.toBeUndefined();
   });
+
+  it("generates a non-custodial linked wallet, returning the key once without storing it", async () => {
+    const repository = new MemoryRepository();
+    const service = new WalletLinkService(repository);
+
+    const result = await service.generateLinkedWallet("123");
+
+    expect(result.privateKey).toMatch(/^0x[0-9a-fA-F]{64}$/);
+    expect(privateKeyToAccount(result.privateKey).address).toBe(result.link.address);
+    const stored = await repository.getWalletLink("123", result.link.address);
+    expect(stored?.status).toBe("linked");
+    expect((stored as Record<string, unknown> | null)?.["encryptedPrivateKey"]).toBeUndefined();
+    await expect(service.requireLinkedOwner("123", result.link.address)).resolves.toBeUndefined();
+  });
 });

@@ -1,0 +1,82 @@
+import type { WalletLink } from "../domain/types.js";
+import { buildWalletLinkMessage } from "../services/walletLinkService.js";
+
+export function renderLinkPage(link: WalletLink): string {
+  const nonceJson = JSON.stringify(link.nonce);
+  const addressJson = JSON.stringify(link.address);
+  const messageJson = JSON.stringify(buildWalletLinkMessage(link));
+  const alreadyLinked = link.status === "linked";
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The Family Wallet Link</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #101318; color: #f7f3e8; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    main { width: min(640px, 100%); border: 1px solid #303744; border-radius: 8px; padding: 24px; background: #171b22; }
+    h1 { margin: 0 0 16px; font-size: 24px; }
+    p, code { color: #c9d1dc; line-height: 1.5; }
+    code { word-break: break-all; }
+    button { border: 0; border-radius: 6px; padding: 12px 16px; background: #f0b90b; color: #101318; font-weight: 700; cursor: pointer; font: inherit; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    output { display: block; min-height: 56px; margin-top: 16px; border-radius: 6px; background: #0d1016; color: #f7f3e8; border: 1px solid #303744; padding: 12px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Link your wallet</h1>
+    <p>Wallet to link: <code id="address">${link.address}</code></p>
+    <p>Connect this exact wallet and sign to prove you control it. The Family never sees your private key.</p>
+    <button id="link" ${alreadyLinked ? "disabled" : ""}>Connect wallet and sign</button>
+    <output id="output">${alreadyLinked ? "This wallet is already linked." : "Waiting for signature."}</output>
+  </main>
+  <script>
+    const nonce = ${nonceJson};
+    const expectedAddress = ${addressJson};
+    const message = ${messageJson};
+    const button = document.getElementById("link");
+    const output = document.getElementById("output");
+    const telegramWebApp = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    if (telegramWebApp) {
+      telegramWebApp.ready();
+    }
+    button.addEventListener("click", async () => {
+      if (!window.ethereum) {
+        output.textContent = "No injected wallet found. Open this page in your wallet's in-app browser (MetaMask/Rabby/etc.).";
+        return;
+      }
+      button.disabled = true;
+      try {
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const address = accounts[0];
+        if (address.toLowerCase() !== expectedAddress.toLowerCase()) {
+          output.textContent = "Connected wallet " + address + " does not match the wallet you are linking (" + expectedAddress + "). Switch accounts and try again.";
+          button.disabled = false;
+          return;
+        }
+        const signature = await window.ethereum.request({
+          method: "personal_sign",
+          params: [message, address]
+        });
+        const response = await fetch("/api/wallet-links/" + encodeURIComponent(nonce) + "/signatures", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signature })
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          throw new Error(body.error || "Wallet link failed");
+        }
+        output.textContent = "Wallet linked: " + body.address + ". You can return to Telegram.";
+      } catch (error) {
+        output.textContent = error instanceof Error ? error.message : "Linking failed";
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>`;
+}

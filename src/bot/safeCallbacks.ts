@@ -1,8 +1,8 @@
 import type { Bot, Context } from "grammy";
 import { AppError, UserInputError } from "../domain/errors.js";
 import { Logger } from "../logger.js";
-import { formatGeneratedManagedWallet, formatSafeCreationSession, formatSafeDeployment, formatSafeSubmission, formatWallet } from "./formatters.js";
-import { safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
+import { formatGeneratedWallet, formatSafeCreationSession, formatSafeDeployment, formatWallet } from "./formatters.js";
+import { safeGroupKeyboard } from "./keyboards.js";
 import { requireChatId, requireGroupAdmin, requireTelegramUserId } from "./commandUtils.js";
 import type { BotDependencies } from "./bot.js";
 
@@ -18,40 +18,15 @@ export function registerSafeCallbacks(bot: Bot, dependencies: BotDependencies): 
     });
   });
 
-  bot.callbackQuery(/^managed_join:/, async (ctx) => {
+  bot.callbackQuery(/^generate_join:/, async (ctx) => {
     await handleCallback(ctx, async () => {
-      const sessionId = ctx.callbackQuery.data.slice("managed_join:".length);
+      const sessionId = ctx.callbackQuery.data.slice("generate_join:".length);
       const fromId = requireTelegramUserId(ctx.from?.id);
-      const existing = await dependencies.managedWalletService.get(fromId);
-      const session =
-        existing === null
-          ? await generateManagedWalletForGroupJoin(ctx, dependencies, sessionId, fromId)
-          : await dependencies.safeGroupSetupService.joinWithWallet(sessionId, fromId, existing.address);
-      await ctx.answerCallbackQuery({ text: "Managed owner wallet joined" });
-      await ctx.editMessageText(formatSafeCreationSession(session), {
-        reply_markup: safeGroupKeyboard(session)
-      });
-    });
-  });
-
-  bot.callbackQuery(/^safe_approve:/, async (ctx) => {
-    await handleCallback(ctx, async () => {
-      const fromId = requireTelegramUserId(ctx.from?.id);
-      const submissionId = ctx.callbackQuery.data.slice("safe_approve:".length);
-      const submission = await dependencies.safeSubmissionService.getSubmission(submissionId);
-      if (submission === null) {
-        throw new UserInputError("Safe submission not found");
-      }
-      const signed = await dependencies.managedWalletService.signSafeHash(fromId, submission.safeTxHash);
-      const updated = await dependencies.safeSubmissionService.submitOwnerSignature(
-        submissionId,
-        signed.wallet.address,
-        signed.signature,
-        fromId
-      );
-      await ctx.answerCallbackQuery({ text: "Safe approval submitted" });
-      await ctx.reply(formatSafeSubmission(updated, dependencies.config.publicBaseUrl), {
-        reply_markup: safeSubmissionKeyboard(updated.id)
+      const result = await dependencies.safeGroupSetupService.generateWalletAndJoin(sessionId, fromId);
+      await sendPrivateMessage(ctx, formatGeneratedWallet(result.generated));
+      await ctx.answerCallbackQuery({ text: "Wallet generated (key sent by DM) and joined" });
+      await ctx.editMessageText(formatSafeCreationSession(result.session), {
+        reply_markup: safeGroupKeyboard(result.session)
       });
     });
   });
@@ -77,6 +52,31 @@ export function registerSafeCallbacks(bot: Bot, dependencies: BotDependencies): 
       );
     });
   });
+
+  bot.callbackQuery(/^safe_cancel:/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
+      const session = await dependencies.safeGroupSetupService.cancelSession(ctx.callbackQuery.data.slice("safe_cancel:".length));
+      await ctx.answerCallbackQuery({ text: "Safe setup cancelled" });
+      await ctx.editMessageText(formatSafeCreationSession(session));
+    });
+  });
+
+  bot.callbackQuery("safe_unlink_confirm", async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
+      if (await dependencies.poolService.hasActiveStakes(chatId)) {
+        throw new UserInputError("The pool now has active shares or pending withdrawals. Settle those before unlinking.");
+      }
+      const wallet = await dependencies.groupWalletService.unlinkWallet(chatId);
+      await ctx.answerCallbackQuery({ text: "Group Safe unlinked" });
+      await ctx.editMessageText(
+        `Group Safe ${wallet.safeAddress} unlinked. Set a new one with /safe_group <threshold> or /wallet_set.`
+      );
+    });
+  });
 }
 
 async function handleCallback(ctx: Context, action: () => Promise<void>): Promise<void> {
@@ -90,17 +90,6 @@ async function handleCallback(ctx: Context, action: () => Promise<void>): Promis
     Logger.error("[TelegramBot] Callback failed", { err: error instanceof Error ? error : undefined });
     await ctx.answerCallbackQuery({ text: "Action failed", show_alert: true });
   }
-}
-
-async function generateManagedWalletForGroupJoin(
-  ctx: Context,
-  dependencies: BotDependencies,
-  sessionId: string,
-  telegramUserId: string
-) {
-  const result = await dependencies.safeGroupSetupService.generateManagedWalletAndJoin(sessionId, telegramUserId);
-  await sendPrivateMessage(ctx, formatGeneratedManagedWallet(result.generated));
-  return result.session;
 }
 
 async function sendPrivateMessage(ctx: Context, message: string): Promise<void> {

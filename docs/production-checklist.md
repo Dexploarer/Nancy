@@ -27,11 +27,10 @@ TELEGRAM_WEBHOOK_SECRET=<random-32-byte-string>
 RISK_CHECK_MODE=warn
 SAFE_TRANSACTION_SERVICE_URL=https://api.safe.global/tx-service/bnb
 SAFE_EXECUTOR_PRIVATE_KEY=<gas-only-deployer-and-executor-key>
-WALLET_ENCRYPTION_KEY=<32-byte-hex-key>
 ```
 
 `SAFE_EXECUTOR_PRIVATE_KEY` pays gas for `/safe_create` and `/safe_execute`; it must not be a Safe owner key.
-`WALLET_ENCRYPTION_KEY` encrypts bot-managed owner wallets used by `/wallet_generate` and managed approval buttons.
+Nancy is non-custodial: it never stores private keys. `/wallet_generate` (DM only) creates a keypair, shows the private key once, and stores only the public key.
 
 ## Launch steps
 
@@ -42,11 +41,11 @@ WALLET_ENCRYPTION_KEY=<32-byte-hex-key>
 5. Run `bun run acceptance:live` with production credentials. Add `PINATA_JWT` only if testing `/flap_metadata`.
 6. Start with `bun start`.
 7. Confirm `GET /health` returns `{ "ok": true }`.
-8. Add the bot to a Telegram group and keep privacy mode compatible with slash commands.
-9. Generate bot-managed owner wallets with `/wallet_generate` or link external owners with `/link_start` and `/link_submit`.
+8. Add the bot to a Telegram group. IMPORTANT: disable privacy mode in BotFather (`/setprivacy` → Disable) so the bot receives plain-text replies — the guided inline-button prompts collect each value from a normal message, which a privacy-enabled bot will not see. Slash commands work either way.
+9. Generate non-custodial wallets with `/wallet_generate` (DM only) or link external owners with `/link_start` and `/link_submit`.
 10. Use `/safe_group <threshold>`, have owners tap `Generate + join` or `Join linked wallet`, then deploy from the inline button.
 11. Run `/pool_init`, assign one trader with `/pool_role`, verify a real BNB deposit with `/pool_deposit`, and open `/pool` from Telegram.
-12. Create a small test proposal, prepare it, approve with a managed wallet button or sign from `/sign/<safeSubmissionId>`, and verify it appears in Safe Wallet before funding the Safe materially.
+12. Create a small test proposal, prepare it, sign from `/sign/<safeSubmissionId>` with a linked owner wallet, and verify it appears in Safe Wallet before funding the Safe materially.
 
 ## Mainnet release gates
 
@@ -58,7 +57,7 @@ WALLET_ENCRYPTION_KEY=<32-byte-hex-key>
 - Review GoPlus/DexScreener risk output for at least five known tokens.
 - Confirm Telegram group admin checks block a non-admin.
 - Confirm a non-linked Telegram user cannot submit a Safe owner signature.
-- Confirm generated wallet private keys are delivered only by DM and managed approval recovers to the Safe owner address.
+- Confirm generated wallet private keys are delivered only by DM and never stored, and that a linked owner's signature recovers to the Safe owner address.
 - Confirm `/safe_group` only accepts linked wallets and the deploy receipt contains the expected `ProxyCreation` event.
 - Confirm `/pool_deposit` rejects a reused transaction hash, a sender that is not linked to the Telegram user, and a transfer that did not go to the Safe.
 - Confirm `/pool_withdraw` locks shares, reserves the gross claim, applies the configured withdrawal fee, and `/safe_prepare withdrawal <id>` produces the Safe payout batch.

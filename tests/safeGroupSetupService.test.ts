@@ -1,8 +1,8 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { Address } from "viem";
-import { ManagedWalletService } from "../src/services/managedWalletService.js";
+import { privateKeyToAccount } from "viem/accounts";
 import { SafeGroupSetupService } from "../src/services/safeGroupSetupService.js";
-import { WalletEncryptionService } from "../src/services/walletEncryptionService.js";
+import { WalletLinkService } from "../src/services/walletLinkService.js";
 import { MemoryRepository } from "../src/storage/memoryRepository.js";
 
 class FakeSafeDeploymentService {
@@ -18,11 +18,7 @@ describe("SafeGroupSetupService", () => {
   it("lets linked Telegram members join and deploys a group Safe", async () => {
     const repository = new MemoryRepository();
     const fakeDeployment = new FakeSafeDeploymentService();
-    const managedWalletService = new ManagedWalletService(
-      repository,
-      new WalletEncryptionService("0x1111111111111111111111111111111111111111111111111111111111111111")
-    );
-    const service = new SafeGroupSetupService(repository, fakeDeployment as never, managedWalletService);
+    const service = new SafeGroupSetupService(repository, fakeDeployment as never, new WalletLinkService(repository));
     await repository.saveWalletLink({
       telegramUserId: "111",
       address: "0x1111111111111111111111111111111111111111",
@@ -52,19 +48,19 @@ describe("SafeGroupSetupService", () => {
     expect(fakeDeployment.createSafe).toHaveBeenCalledTimes(1);
   });
 
-  it("can generate and join a managed wallet in one group setup action", async () => {
+  it("generates a non-custodial wallet and joins it in one group setup action", async () => {
     const repository = new MemoryRepository();
-    const service = new SafeGroupSetupService(
-      repository,
-      new FakeSafeDeploymentService() as never,
-      new ManagedWalletService(repository, new WalletEncryptionService("0x1111111111111111111111111111111111111111111111111111111111111111"))
-    );
+    const service = new SafeGroupSetupService(repository, new FakeSafeDeploymentService() as never, new WalletLinkService(repository));
 
     const setup = await service.createSession("chat", "admin", 1);
-    const result = await service.generateManagedWalletAndJoin(setup.id, "111");
+    const result = await service.generateWalletAndJoin(setup.id, "111");
 
     expect(result.generated.privateKey).toStartWith("0x");
+    expect(privateKeyToAccount(result.generated.privateKey).address).toBe(result.generated.link.address);
     expect(result.session.owners).toHaveLength(1);
-    expect(result.session.owners[0]?.address).toBe(result.generated.wallet.address);
+    expect(result.session.owners[0]?.address).toBe(result.generated.link.address);
+    // generated wallet is stored as a linked wallet, not a managed (custodial) one
+    const stored = await repository.getWalletLink("111", result.generated.link.address);
+    expect(stored?.status).toBe("linked");
   });
 });

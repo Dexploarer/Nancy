@@ -29,7 +29,7 @@ describe("DepositVerificationService", () => {
     expect(deposit.amountWei).toBe(100n);
   });
 
-  it("rejects deposits without a linked or managed sender", async () => {
+  it("rejects deposits from a sender not linked to the Telegram user", async () => {
     const service = new DepositVerificationService("https://rpc.example", 56, fakeClient({
       from: linkedSender,
       to: safeAddress,

@@ -41,21 +41,16 @@ export type WalletLink = {
   linkedAt?: Date;
 };
 
-export type EncryptedPrivateKey = {
-  ciphertext: Hex;
-  iv: Hex;
-  authTag: Hex;
-};
-
-export type ManagedWallet = {
+export type PendingPrompt = {
+  chatId: ChatId;
   telegramUserId: string;
-  address: Address;
-  encryptedPrivateKey: EncryptedPrivateKey;
+  command: string;
+  collected: string[];
   createdAt: Date;
-  lastUsedAt?: Date;
+  updatedAt: Date;
 };
 
-export type SafeCreationSessionStatus = "collecting" | "deployed";
+export type SafeCreationSessionStatus = "collecting" | "deployed" | "cancelled";
 
 export type SafeCreationOwner = {
   telegramUserId: string;
@@ -164,7 +159,13 @@ export type PoolMember = {
   updatedAt: Date;
 };
 
-export type PoolLedgerEntryType = "deposit" | "withdrawal-request" | "withdrawal-execution" | "nav-update" | "role-update";
+export type PoolLedgerEntryType =
+  | "deposit"
+  | "withdrawal-request"
+  | "withdrawal-cancel"
+  | "withdrawal-execution"
+  | "nav-update"
+  | "role-update";
 
 export type PoolLedgerEntry = {
   id: string;

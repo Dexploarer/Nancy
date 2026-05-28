@@ -11,7 +11,6 @@ const EnvSchema = z.object({
   BSC_RPC_URL: z.string().url(),
   BSC_CHAIN_ID: z.coerce.number().int().refine((value) => value === 56 || value === 97),
   SAFE_TRANSACTION_SERVICE_URL: z.string().url(),
-  WALLET_ENCRYPTION_KEY: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
   PINATA_JWT: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional())
 });
 
@@ -59,7 +58,7 @@ Logger.info("[LiveAcceptance] Live acceptance checks passed", {
 function parseEnv(): z.infer<typeof EnvSchema> {
   const parsed = EnvSchema.safeParse(process.env);
   if (!parsed.success) {
-    throw new AppError("Live acceptance requires Telegram, BSC RPC, Safe Transaction Service, and wallet encryption env");
+    throw new AppError("Live acceptance requires Telegram, BSC RPC, and Safe Transaction Service env");
   }
   return parsed.data;
 }

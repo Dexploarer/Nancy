@@ -236,6 +236,49 @@ export class PoolService {
     return request;
   }
 
+  async cancelWithdrawal(chatId: ChatId, requestId: string, telegramUserId: string): Promise<PoolWithdrawalRequest> {
+    const request = await this.requireWithdrawal(chatId, requestId);
+    if (request.status !== "queued") {
+      throw new UserInputError("Only a queued withdrawal can be cancelled", { requestId, status: request.status });
+    }
+    const actor = await this.requireMember(chatId, telegramUserId);
+    if (request.telegramUserId !== telegramUserId && actor.role !== "owner") {
+      throw new UserInputError("Only the requester or a pool owner can cancel this withdrawal");
+    }
+    const member = await this.requireMember(chatId, request.telegramUserId);
+    const now = new Date();
+    await this.poolRepository.savePoolMember({
+      ...member,
+      shares: member.shares + request.shares,
+      updatedAt: now
+    });
+    const cancelled: PoolWithdrawalRequest = { ...request, status: "cancelled", cancelledAt: now };
+    await this.poolRepository.savePoolWithdrawalRequest(cancelled);
+    const snapshot = await this.requireSnapshot(chatId);
+    const totalSharesAfter = await this.getTotalShares(chatId);
+    await this.saveSnapshot(chatId, snapshot.navWei, snapshot.liquidWei, snapshot.positionsWei, totalSharesAfter, now);
+    await this.saveLedgerEntry({
+      chatId,
+      telegramUserId: request.telegramUserId,
+      type: "withdrawal-cancel",
+      amountWei: request.grossAmountWei,
+      sharesDelta: request.shares,
+      navWei: snapshot.navWei,
+      totalSharesAfter,
+      createdAt: now
+    });
+    return cancelled;
+  }
+
+  async hasActiveStakes(chatId: ChatId): Promise<boolean> {
+    const members = await this.poolRepository.listPoolMembers(chatId);
+    if (members.some((member) => member.shares > 0n)) {
+      return true;
+    }
+    const withdrawals = await this.poolRepository.listPoolWithdrawalRequests(chatId);
+    return withdrawals.some((request) => request.status === "queued" || request.status === "prepared");
+  }
+
   async getWithdrawalTransactions(chatId: ChatId, requestId: string, feeRecipient: Address): Promise<ChainTransaction[]> {
     const request = await this.requireWithdrawal(chatId, requestId);
     if (request.status !== "queued") {
@@ -329,7 +372,9 @@ export class PoolService {
   private async requireGroupWallet(chatId: ChatId): Promise<void> {
     const wallet = await this.repository.getGroupWallet(chatId);
     if (wallet === null) {
-      throw new UserInputError("Set or create the group Safe before initializing the pool");
+      throw new UserInputError(
+        "This group has no Safe yet. An admin should create one with /safe_group <threshold> (members then join with the buttons), or link an existing Safe with /wallet_set <safeAddress> <threshold> <owner1> [owner2 ...]."
+      );
     }
   }
 

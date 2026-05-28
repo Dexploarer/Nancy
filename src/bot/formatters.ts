@@ -2,7 +2,6 @@ import type {
   ChainTransaction,
   FlapLaunchProposal,
   GroupWallet,
-  ManagedWallet,
   SafeCreationSession,
   SafeSubmission,
   TradeProposal
@@ -10,7 +9,7 @@ import type {
 import { formatBnb } from "../utils/evm.js";
 import type { SafeDeployment } from "../services/safeDeploymentService.js";
 import type { SafeTransactionServiceStatus } from "../chain/safeService.js";
-import type { GeneratedManagedWallet } from "../services/managedWalletService.js";
+import type { GeneratedWallet } from "../services/walletLinkService.js";
 
 export function formatWallet(wallet: GroupWallet): string {
   return [
@@ -21,15 +20,12 @@ export function formatWallet(wallet: GroupWallet): string {
   ].join("\n");
 }
 
-export function formatManagedWallet(wallet: ManagedWallet): string {
-  return ["Bot-managed owner wallet", `Address: ${wallet.address}`, `Created: ${wallet.createdAt.toISOString()}`].join("\n");
-}
-
-export function formatGeneratedManagedWallet(generated: GeneratedManagedWallet): string {
+export function formatGeneratedWallet(generated: GeneratedWallet): string {
   return [
-    "Bot-managed owner wallet created",
-    `Address: ${generated.wallet.address}`,
-    "Save this private key now. It will not be shown again.",
+    "New non-custodial wallet",
+    `Address: ${generated.link.address}`,
+    "Nancy does NOT store this key. Save it now — it will not be shown again.",
+    "Import it into your own wallet (MetaMask/Rabby/etc.) to sign.",
     generated.privateKey
   ].join("\n");
 }
@@ -100,8 +96,8 @@ export function formatSafeSubmission(submission: SafeSubmission, publicBaseUrl?:
     `Nonce: ${submission.safeTransaction.nonce.toString()}`,
     `Service: ${submission.transactionServiceUrl}`,
     "Owner flow:",
-    `1. Tap Approve with managed wallet, or open ${signingUrl}.`,
-    `2. External owners sign with a linked Safe owner wallet and submit from the page.`
+    `1. Open ${signingUrl}, connect your linked owner wallet, and sign.`,
+    `2. The first valid owner signature proposes the transaction; later signatures confirm it.`
   ].join("\n");
 }
 

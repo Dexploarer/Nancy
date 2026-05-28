@@ -1,22 +1,19 @@
-import { InlineKeyboard, type Bot, type Context } from "grammy";
+import type { Bot } from "grammy";
 import type { Address, Hex } from "viem";
 import type { AppConfig } from "../config.js";
-import { AppError, UserInputError } from "../domain/errors.js";
+import { InvalidInputError, UserInputError } from "../domain/errors.js";
 import type { PoolAnalytics, PoolRole, PoolWithdrawalRequest } from "../domain/types.js";
-import { Logger } from "../logger.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
 import { GroupWalletService } from "../services/groupWalletService.js";
-import { ManagedWalletService } from "../services/managedWalletService.js";
 import { PoolService } from "../services/poolService.js";
 import { WalletLinkService } from "../services/walletLinkService.js";
 import { formatBnb, parseAddress, parseBasisPoints, parseBnbAmount, parseNonNegativeBnbAmount, parseTransactionHash } from "../utils/evm.js";
-import { parsePositiveInteger, requireChatId, requireGroupAdmin, requiredPart, requireTelegramUserId, splitCommand } from "./commandUtils.js";
+import { handleUserCommand, parsePositiveInteger, requireChatId, requireGroupAdmin, requiredPart, requireTelegramUserId, splitCommand } from "./commandUtils.js";
 import { poolAppKeyboard } from "./keyboards.js";
 
 export type PoolCommandDependencies = {
   groupWalletService: GroupWalletService;
   walletLinkService: WalletLinkService;
-  managedWalletService: ManagedWalletService;
   poolService: PoolService;
   depositVerificationService: DepositVerificationService;
   config: AppConfig;
@@ -24,7 +21,7 @@ export type PoolCommandDependencies = {
 
 export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependencies): void {
   bot.command("pool_init", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "pool_init", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       await requireGroupAdmin(ctx, chatId);
       const analytics = await dependencies.poolService.initializePool(chatId, requireTelegramUserId(ctx.from?.id));
@@ -35,7 +32,7 @@ export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependen
   });
 
   bot.command("pool", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "pool", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       const analytics = await dependencies.poolService.getAnalytics(chatId, requireTelegramUserId(ctx.from?.id));
       await ctx.reply(formatPoolAnalytics(analytics), {
@@ -45,7 +42,7 @@ export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependen
   });
 
   bot.command("pool_nav", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "pool_nav", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       const fromId = requireTelegramUserId(ctx.from?.id);
       const parts = splitCommand(ctx.message?.text, 4);
@@ -63,7 +60,7 @@ export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependen
   });
 
   bot.command("pool_role", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "pool_role", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       const parts = splitCommand(ctx.message?.text, 3);
       const member = await dependencies.poolService.setRole({
@@ -77,7 +74,7 @@ export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependen
   });
 
   bot.command("pool_deposit", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "pool_deposit", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       const fromId = requireTelegramUserId(ctx.from?.id);
       const parts = splitCommand(ctx.message?.text, 3);
@@ -85,7 +82,9 @@ export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependen
       const transactionHash = parseTransactionHash(requiredPart(parts, 2));
       const wallet = await dependencies.groupWalletService.getWallet(chatId);
       if (wallet === null) {
-        throw new UserInputError("Set or create the group Safe before pool deposits");
+        throw new UserInputError(
+          "This group has no Safe yet, so deposits cannot be credited. An admin should create one with /safe_group <threshold> or link an existing Safe with /wallet_set <safeAddress> <threshold> <owner1> [owner2 ...]."
+        );
       }
       await dependencies.depositVerificationService.verifyNativeDeposit({
         transactionHash,
@@ -106,7 +105,7 @@ export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependen
   });
 
   bot.command("pool_withdraw", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "pool_withdraw", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       const fromId = requireTelegramUserId(ctx.from?.id);
       const parts = splitCommand(ctx.message?.text, 3);
@@ -122,15 +121,21 @@ export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependen
       await ctx.reply(formatWithdrawalRequest(request));
     });
   });
+
+  bot.command("pool_cancel", async (ctx) => {
+    await handleUserCommand(ctx, "pool_cancel", async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const parts = splitCommand(ctx.message?.text, 2);
+      const request = await dependencies.poolService.cancelWithdrawal(chatId, requiredPart(parts, 1), fromId);
+      await ctx.reply(`Withdrawal ${request.id} cancelled. ${request.shares.toString()} shares were restored.`);
+    });
+  });
 }
 
 async function getAllowedDepositSenders(dependencies: PoolCommandDependencies, telegramUserId: string): Promise<Address[]> {
   const linkedWallets = await dependencies.walletLinkService.getLinkedWallets(telegramUserId);
-  const managedWallet = await dependencies.managedWalletService.get(telegramUserId);
-  return [
-    ...linkedWallets.map((wallet) => wallet.address),
-    ...(managedWallet === null ? [] : [managedWallet.address])
-  ];
+  return linkedWallets.map((wallet) => wallet.address);
 }
 
 async function requireLinkedRecipient(
@@ -141,7 +146,7 @@ async function requireLinkedRecipient(
   const allowed = await getAllowedDepositSenders(dependencies, telegramUserId);
   const linked = allowed.some((address) => address.toLowerCase() === recipientAddress.toLowerCase());
   if (!linked) {
-    throw new UserInputError("Withdrawal recipient must be a linked or managed wallet for your Telegram user");
+    throw new UserInputError("Withdrawal recipient must be a wallet linked to your Telegram account");
   }
 }
 
@@ -149,7 +154,7 @@ function parsePoolRole(value: string): PoolRole {
   if (value === "owner" || value === "trader" || value === "member") {
     return value;
   }
-  throw new UserInputError("Pool role must be owner, trader, or member");
+  throw new InvalidInputError("Role must be one of owner, trader, or member.", { value });
 }
 
 function parsePositiveTelegramUserId(value: string): string {
@@ -157,7 +162,7 @@ function parsePositiveTelegramUserId(value: string): string {
   return value;
 }
 
-function formatPoolAnalytics(analytics: PoolAnalytics): string {
+export function formatPoolAnalytics(analytics: PoolAnalytics): string {
   return [
     "Pool analytics",
     analytics.safeAddress === undefined ? "Safe: not set" : `Safe: ${analytics.safeAddress}`,
@@ -173,7 +178,7 @@ function formatPoolAnalytics(analytics: PoolAnalytics): string {
   ].join("\n");
 }
 
-function formatWithdrawalRequest(request: PoolWithdrawalRequest): string {
+export function formatWithdrawalRequest(request: PoolWithdrawalRequest): string {
   return [
     `Withdrawal request ${request.id}`,
     `Status: ${request.status}`,
@@ -187,17 +192,4 @@ function formatWithdrawalRequest(request: PoolWithdrawalRequest): string {
 
 function formatBps(value: number): string {
   return `${(value / 100).toFixed(2)}%`;
-}
-
-async function handleUserCommand(ctx: Context, action: () => Promise<void>): Promise<void> {
-  try {
-    await action();
-  } catch (error) {
-    if (error instanceof UserInputError || error instanceof AppError) {
-      await ctx.reply(error.message);
-      return;
-    }
-    Logger.error("[PoolCommands] Command failed", { err: error instanceof Error ? error : undefined });
-    await ctx.reply("Command failed");
-  }
 }

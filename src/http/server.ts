@@ -6,6 +6,7 @@ import { AppError, UserInputError } from "../domain/errors.js";
 import { Logger } from "../logger.js";
 import { parseAddress, parseHex } from "../utils/evm.js";
 import { renderSigningPage } from "./signingPage.js";
+import { renderLinkPage } from "./linkPage.js";
 import { renderPoolPage } from "./poolPage.js";
 import { verifyTelegramInitData } from "./telegramInitData.js";
 import { serializePoolAnalytics } from "./poolAnalyticsResponse.js";
@@ -18,37 +19,51 @@ const SignaturePayloadSchema = z.object({
   signature: z.string().regex(/^0x[0-9a-fA-F]+$/)
 });
 
-export async function startHttpRuntime(appState: App, config: AppConfig): Promise<void> {
+const WalletLinkPayloadSchema = z.object({
+  signature: z.string().regex(/^0x[0-9a-fA-F]+$/)
+});
+
+export function createFetchHandler(appState: App, config: AppConfig): (request: Request) => Response | Promise<Response> {
   const webhookPath = config.telegramWebhookSecret === undefined ? undefined : `/telegram/${config.telegramWebhookSecret}`;
   const webhookHandler = webhookPath === undefined ? undefined : webhookCallback(appState.bot, "bun");
 
+  return function fetch(request: Request): Response | Promise<Response> {
+    const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/health") {
+      return Response.json({ ok: true });
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/sign/")) {
+      return route(async () => renderSafeSigningPage(appState, url.pathname));
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/link/")) {
+      return route(async () => renderWalletLinkPage(appState, url.pathname));
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/pool/")) {
+      return route(async () => renderPoolAnalyticsPage(url.pathname));
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/api/pools/") && url.pathname.endsWith("/analytics")) {
+      return route(async () => getPoolAnalytics(appState, config, url));
+    }
+    if (request.method === "POST" && url.pathname.startsWith("/api/wallet-links/")) {
+      return route(async () => submitWalletLinkSignature(appState, request, url.pathname));
+    }
+    if (request.method === "POST" && url.pathname.startsWith("/api/safe-submissions/")) {
+      return route(async () => submitSafeSignature(appState, config, request, url.pathname));
+    }
+    if (request.method === "POST" && webhookPath !== undefined && url.pathname === webhookPath && webhookHandler !== undefined) {
+      return webhookHandler(request);
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+}
+
+export async function startHttpRuntime(appState: App, config: AppConfig): Promise<void> {
   await configureTelegramBot(appState.bot);
   Logger.info("[HttpRuntime] Telegram commands configured");
 
   Bun.serve({
     port: config.httpPort,
-    async fetch(request) {
-      const url = new URL(request.url);
-      if (request.method === "GET" && url.pathname === "/health") {
-        return Response.json({ ok: true });
-      }
-      if (request.method === "GET" && url.pathname.startsWith("/sign/")) {
-        return route(async () => renderSafeSigningPage(appState, url.pathname));
-      }
-      if (request.method === "GET" && url.pathname.startsWith("/pool/")) {
-        return route(async () => renderPoolAnalyticsPage(url.pathname));
-      }
-      if (request.method === "GET" && url.pathname.startsWith("/api/pools/") && url.pathname.endsWith("/analytics")) {
-        return route(async () => getPoolAnalytics(appState, config, url));
-      }
-      if (request.method === "POST" && url.pathname.startsWith("/api/safe-submissions/")) {
-        return route(async () => submitSafeSignature(appState, config, request, url.pathname));
-      }
-      if (request.method === "POST" && webhookPath !== undefined && url.pathname === webhookPath && webhookHandler !== undefined) {
-        return webhookHandler(request);
-      }
-      return Response.json({ error: "Not found" }, { status: 404 });
-    }
+    fetch: createFetchHandler(appState, config)
   });
 
   Logger.info("[HttpRuntime] HTTP server listening", { port: config.httpPort });
@@ -73,6 +88,21 @@ async function renderSafeSigningPage(appState: App, pathname: string): Promise<R
   return new Response(renderSigningPage(submission), {
     headers: { "Content-Type": "text/html; charset=utf-8" }
   });
+}
+
+async function renderWalletLinkPage(appState: App, pathname: string): Promise<Response> {
+  const nonce = requiredPathSuffix(pathname, "/link/");
+  const link = await appState.walletLinkService.getPendingLinkByNonce(nonce);
+  return new Response(renderLinkPage(link), {
+    headers: { "Content-Type": "text/html; charset=utf-8" }
+  });
+}
+
+async function submitWalletLinkSignature(appState: App, request: Request, pathname: string): Promise<Response> {
+  const nonce = requiredApiWalletLinkNonce(pathname);
+  const payload = await parseWalletLinkBody(request);
+  const link = await appState.walletLinkService.completeLinkByNonce(nonce, parseHex(payload.signature, "signature"));
+  return Response.json({ address: link.address, status: link.status });
 }
 
 async function renderPoolAnalyticsPage(pathname: string): Promise<Response> {
@@ -159,6 +189,19 @@ function requiredApiSubmissionId(pathname: string): string {
   return decodeURIComponent(submissionId);
 }
 
+function requiredApiWalletLinkNonce(pathname: string): string {
+  const prefix = "/api/wallet-links/";
+  const suffix = "/signatures";
+  if (!pathname.startsWith(prefix) || !pathname.endsWith(suffix)) {
+    throw new UserInputError("Invalid wallet-link signature route");
+  }
+  const nonce = pathname.slice(prefix.length, -suffix.length);
+  if (nonce.length === 0) {
+    throw new UserInputError("Missing wallet-link nonce");
+  }
+  return decodeURIComponent(nonce);
+}
+
 function requiredApiPoolChatId(pathname: string): string {
   const prefix = "/api/pools/";
   const suffix = "/analytics";
@@ -178,6 +221,17 @@ async function parseJsonBody(request: Request): Promise<z.infer<typeof Signature
   } catch (error) {
     if (error instanceof z.ZodError || error instanceof SyntaxError) {
       throw new UserInputError("Invalid signature submission body");
+    }
+    throw error;
+  }
+}
+
+async function parseWalletLinkBody(request: Request): Promise<z.infer<typeof WalletLinkPayloadSchema>> {
+  try {
+    return WalletLinkPayloadSchema.parse(await request.json());
+  } catch (error) {
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
+      throw new UserInputError("Invalid wallet-link submission body");
     }
     throw error;
   }

@@ -3,11 +3,9 @@ import { parseEther } from "viem";
 import type { PoolAnalytics } from "../domain/types.js";
 import { Logger } from "../logger.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
-import { ManagedWalletService } from "../services/managedWalletService.js";
 import { PoolService } from "../services/poolService.js";
 import { SafeGroupSetupService } from "../services/safeGroupSetupService.js";
 import { SafeSubmissionService } from "../services/safeSubmissionService.js";
-import { WalletEncryptionService } from "../services/walletEncryptionService.js";
 import { WalletLinkService } from "../services/walletLinkService.js";
 import { MemoryPoolRepository } from "../storage/memoryPoolRepository.js";
 import { MemoryRepository } from "../storage/memoryRepository.js";
@@ -18,14 +16,13 @@ import {
   SimulatedSafeDeploymentService,
   SimulatedSafeService,
   simulationHash,
-  submitManagedSignature,
+  submitOwnerSignature,
   verifyAndCreditDeposit
 } from "./fullSimulationFakes.js";
 
 const chatId = "sim_group";
 const platformFeeRecipient: Address = "0x8888888888888888888888888888888888888888";
 const tokenAddress: Address = "0x7777777777777777777777777777777777777777";
-const encryptionKey = "0x1111111111111111111111111111111111111111111111111111111111111111";
 
 type SimulationMember = {
   telegramUserId: string;
@@ -82,12 +79,10 @@ export type FullSimulationResult = {
 export async function runFullSimulation(): Promise<FullSimulationResult> {
   const repository = new MemoryRepository();
   const poolRepository = new MemoryPoolRepository();
-  const walletEncryptionService = new WalletEncryptionService(encryptionKey);
-  const managedWalletService = new ManagedWalletService(repository, walletEncryptionService);
-  const safeDeploymentService = new SimulatedSafeDeploymentService();
-  const safeGroupSetupService = new SafeGroupSetupService(repository, safeDeploymentService, managedWalletService);
-  const poolService = new PoolService(repository, poolRepository, 25);
   const walletLinkService = new WalletLinkService(repository);
+  const safeDeploymentService = new SimulatedSafeDeploymentService();
+  const safeGroupSetupService = new SafeGroupSetupService(repository, safeDeploymentService, walletLinkService);
+  const poolService = new PoolService(repository, poolRepository, 25);
   const safeService = new SimulatedSafeService(2);
   const safeSubmissionService = new SafeSubmissionService(
     repository,
@@ -99,11 +94,11 @@ export async function runFullSimulation(): Promise<FullSimulationResult> {
   const depositClient = new SimulatedDepositClient();
   const depositVerificationService = new DepositVerificationService("https://sim.invalid", 56, depositClient);
 
-  const ownerOne = await createSimulationWallet(repository, walletEncryptionService, "owner-1", 1);
-  const ownerTwo = await createSimulationWallet(repository, walletEncryptionService, "owner-2", 2);
-  const trader = await createSimulationWallet(repository, walletEncryptionService, "trader", 3);
-  const memberA = await createSimulationWallet(repository, walletEncryptionService, "member-a", 4);
-  const memberB = await createSimulationWallet(repository, walletEncryptionService, "member-b", 5);
+  const ownerOne = await createSimulationWallet(walletLinkService, "owner-1", 1);
+  const ownerTwo = await createSimulationWallet(walletLinkService, "owner-2", 2);
+  await createSimulationWallet(walletLinkService, "trader", 3);
+  const memberA = await createSimulationWallet(walletLinkService, "member-a", 4);
+  const memberB = await createSimulationWallet(walletLinkService, "member-b", 5);
 
   const session = await safeGroupSetupService.createSession(chatId, "owner-1", 2);
   await safeGroupSetupService.joinWithWallet(session.id, "owner-1", ownerOne.address);
@@ -176,10 +171,10 @@ export async function runFullSimulation(): Promise<FullSimulationResult> {
     createdAt: new Date("2026-05-27T00:00:00.000Z")
   });
   const tradeSubmission = await safeSubmissionService.prepareTradeSubmission(chatId, "trade_sim");
-  await submitManagedSignature(safeSubmissionService, managedWalletService, tradeSubmission, "owner-1", ownerOne.address);
+  await submitOwnerSignature(safeSubmissionService, tradeSubmission, ownerOne);
   const tradeConfirmationsAfterFirstSignature = safeService.confirmationCount(tradeSubmission.safeTxHash);
   const tradeExecutionRejectedBeforeThreshold = await expectFailure(safeSubmissionService.execute(tradeSubmission.id));
-  await submitManagedSignature(safeSubmissionService, managedWalletService, tradeSubmission, "owner-2", ownerTwo.address);
+  await submitOwnerSignature(safeSubmissionService, tradeSubmission, ownerTwo);
   const tradeConfirmationsAfterSecondSignature = safeService.confirmationCount(tradeSubmission.safeTxHash);
   const tradeConfirmationOwners = safeService.confirmationOwners(tradeSubmission.safeTxHash);
   const tradeExecutionHash = await safeSubmissionService.execute(tradeSubmission.id);
@@ -201,9 +196,9 @@ export async function runFullSimulation(): Promise<FullSimulationResult> {
   });
   const afterWithdrawalQueued = await poolService.getAnalytics(chatId, "member-a");
   const withdrawalSubmission = await safeSubmissionService.prepareWithdrawalSubmission(chatId, withdrawal.id);
-  await submitManagedSignature(safeSubmissionService, managedWalletService, withdrawalSubmission, "owner-1", ownerOne.address);
+  await submitOwnerSignature(safeSubmissionService, withdrawalSubmission, ownerOne);
   const withdrawalConfirmationsAfterFirstSignature = safeService.confirmationCount(withdrawalSubmission.safeTxHash);
-  await submitManagedSignature(safeSubmissionService, managedWalletService, withdrawalSubmission, "owner-2", ownerTwo.address);
+  await submitOwnerSignature(safeSubmissionService, withdrawalSubmission, ownerTwo);
   const withdrawalConfirmationsAfterSecondSignature = safeService.confirmationCount(withdrawalSubmission.safeTxHash);
   const withdrawalConfirmationOwners = safeService.confirmationOwners(withdrawalSubmission.safeTxHash);
   const withdrawalExecutionHash = await safeSubmissionService.execute(withdrawalSubmission.id);

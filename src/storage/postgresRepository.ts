@@ -3,7 +3,7 @@ import type {
   ChatId,
   FlapLaunchProposal,
   GroupWallet,
-  ManagedWallet,
+  PendingPrompt,
   SafeCreationSession,
   SafeSubmission,
   TradeProposal,
@@ -21,7 +21,7 @@ import {
 import type {
   FlapLaunchRow,
   GroupWalletRow,
-  ManagedWalletRow,
+  PendingPromptRow,
   SafeCreationSessionRow,
   SafeSubmissionRow,
   TradeProposalRow,
@@ -63,6 +63,44 @@ export class PostgresRepository implements Repository {
     );
   }
 
+  async deleteGroupWallet(chatId: ChatId): Promise<void> {
+    await this.pool.query("delete from group_wallets where chat_id = $1", [chatId]);
+  }
+
+  async getPendingPrompt(chatId: ChatId, telegramUserId: string): Promise<PendingPrompt | null> {
+    const result = await this.pool.query<PendingPromptRow>(
+      `select chat_id, telegram_user_id, command, collected, created_at, updated_at
+       from pending_prompts where chat_id = $1 and telegram_user_id = $2`,
+      [chatId, telegramUserId]
+    );
+    const row = result.rows[0];
+    if (row === undefined) {
+      return null;
+    }
+    return {
+      chatId: row.chat_id,
+      telegramUserId: row.telegram_user_id,
+      command: row.command,
+      collected: row.collected,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  async savePendingPrompt(prompt: PendingPrompt): Promise<void> {
+    await this.pool.query(
+      `insert into pending_prompts(chat_id, telegram_user_id, command, collected, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6)
+       on conflict (chat_id, telegram_user_id)
+       do update set command = excluded.command, collected = excluded.collected, updated_at = excluded.updated_at`,
+      [prompt.chatId, prompt.telegramUserId, prompt.command, JSON.stringify(prompt.collected), prompt.createdAt, prompt.updatedAt]
+    );
+  }
+
+  async deletePendingPrompt(chatId: ChatId, telegramUserId: string): Promise<void> {
+    await this.pool.query("delete from pending_prompts where chat_id = $1 and telegram_user_id = $2", [chatId, telegramUserId]);
+  }
+
   async getWalletLink(telegramUserId: string, address: string): Promise<WalletLink | null> {
     const result = await this.pool.query<WalletLinkRow>(
       `select telegram_user_id, address, nonce, status, created_at, linked_at
@@ -93,6 +131,26 @@ export class PostgresRepository implements Repository {
     );
   }
 
+  async getWalletLinkByNonce(nonce: string): Promise<WalletLink | null> {
+    const result = await this.pool.query<WalletLinkRow>(
+      `select telegram_user_id, address, nonce, status, created_at, linked_at
+       from wallet_links where nonce = $1`,
+      [nonce]
+    );
+    const row = result.rows[0];
+    if (row === undefined) {
+      return null;
+    }
+    return {
+      telegramUserId: row.telegram_user_id,
+      address: row.address,
+      nonce: row.nonce,
+      status: row.status,
+      createdAt: row.created_at,
+      ...(row.linked_at === null ? {} : { linkedAt: row.linked_at })
+    };
+  }
+
   async getLinkedWalletsByTelegramUserId(telegramUserId: string): Promise<WalletLink[]> {
     const result = await this.pool.query<WalletLinkRow>(
       `select telegram_user_id, address, nonce, status, created_at, linked_at
@@ -107,41 +165,6 @@ export class PostgresRepository implements Repository {
       createdAt: row.created_at,
       ...(row.linked_at === null ? {} : { linkedAt: row.linked_at })
     }));
-  }
-
-  async getManagedWallet(telegramUserId: string): Promise<ManagedWallet | null> {
-    const result = await this.pool.query<ManagedWalletRow>(
-      `select telegram_user_id, address, encrypted_private_key, created_at, last_used_at
-       from managed_wallets where telegram_user_id = $1`,
-      [telegramUserId]
-    );
-    const row = result.rows[0];
-    if (row === undefined) {
-      return null;
-    }
-    return {
-      telegramUserId: row.telegram_user_id,
-      address: row.address,
-      encryptedPrivateKey: row.encrypted_private_key,
-      createdAt: row.created_at,
-      ...(row.last_used_at === null ? {} : { lastUsedAt: row.last_used_at })
-    };
-  }
-
-  async saveManagedWallet(wallet: ManagedWallet): Promise<void> {
-    await this.pool.query(
-      `insert into managed_wallets(telegram_user_id, address, encrypted_private_key, created_at, last_used_at)
-       values ($1, $2, $3, $4, $5)
-       on conflict (telegram_user_id)
-       do update set encrypted_private_key = excluded.encrypted_private_key, last_used_at = excluded.last_used_at`,
-      [
-        wallet.telegramUserId,
-        wallet.address,
-        JSON.stringify(wallet.encryptedPrivateKey),
-        wallet.createdAt,
-        wallet.lastUsedAt ?? null
-      ]
-    );
   }
 
   async getSafeCreationSession(id: string): Promise<SafeCreationSession | null> {

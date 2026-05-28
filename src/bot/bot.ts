@@ -1,14 +1,13 @@
 import { Bot, type Context } from "grammy";
 import type { AppConfig } from "../config.js";
-import { AppError, UserInputError } from "../domain/errors.js";
+import { AppError, InvalidInputError, UserInputError } from "../domain/errors.js";
 import type { Repository } from "../storage/repository.js";
 import { parseAddress, parseBasisPoints, parseBnbAmount, parseHex } from "../utils/evm.js";
 import { Logger } from "../logger.js";
 import { createFlapSalt, parseVaultRecipients } from "../chain/flapService.js";
 import {
   formatFlapLaunch,
-  formatGeneratedManagedWallet,
-  formatManagedWallet,
+  formatGeneratedWallet,
   formatSafeDeployment,
   formatSafeCreationSession,
   formatSafeStatus,
@@ -24,15 +23,16 @@ import { WalletLinkService } from "../services/walletLinkService.js";
 import { FlapMetadataService } from "../services/flapMetadataService.js";
 import { SafeDeploymentService } from "../services/safeDeploymentService.js";
 import { SafeGroupSetupService } from "../services/safeGroupSetupService.js";
-import { ManagedWalletService } from "../services/managedWalletService.js";
 import { PoolService } from "../services/poolService.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
-import { BOT_COMMANDS, BOT_NAME } from "./telegramCommands.js";
+import { BOT_COMMANDS } from "./telegramCommands.js";
 import { helpText, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
 import { registerSafeCallbacks } from "./safeCallbacks.js";
 import { registerPoolCommands } from "./poolCommands.js";
+import { beginUnlink, handleMenuSelection, handlePromptBack, handlePromptCancel, routePromptInput } from "./promptController.js";
 import {
   emptyToUndefined,
+  handleUserCommand,
   parsePositiveInteger,
   requireChatId,
   requireGroupAdmin,
@@ -45,7 +45,6 @@ export type BotDependencies = {
   repository: Repository;
   groupWalletService: GroupWalletService;
   walletLinkService: WalletLinkService;
-  managedWalletService: ManagedWalletService;
   tradeService: TradeService;
   flapLaunchService: FlapLaunchService;
   flapMetadataService: FlapMetadataService;
@@ -63,7 +62,6 @@ export function createBot(dependencies: BotDependencies): Bot {
   bot.command("start", async (ctx) => {
     await ctx.reply(
       [
-        BOT_NAME,
         "The Family group trading bot",
         "Use the buttons for common flows or Telegram's command menu for every command.",
         "",
@@ -74,38 +72,41 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("wallet_generate", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "wallet_generate", async () => {
       const fromId = requireTelegramUserId(ctx.from?.id);
-      const generated = await dependencies.managedWalletService.generate(fromId);
-      const message = formatGeneratedManagedWallet(generated);
-      if (ctx.chat?.type === "private") {
-        await ctx.reply(message);
+      if (ctx.chat?.type !== "private") {
+        await ctx.reply(
+          "DM me to generate a wallet so your private key stays private. Open a private chat with me and run /wallet_generate there."
+        );
         return;
       }
-      await sendPrivateMessage(ctx, message);
-      await ctx.reply(`Managed wallet created and sent by DM: ${generated.wallet.address}`);
-    });
-  });
-
-  bot.command("wallet_managed", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
-      const wallet = await dependencies.managedWalletService.requireWallet(requireTelegramUserId(ctx.from?.id));
-      await ctx.reply(formatManagedWallet(wallet));
+      const generated = await dependencies.walletLinkService.generateLinkedWallet(fromId);
+      await ctx.reply(formatGeneratedWallet(generated));
     });
   });
 
   bot.command("link_start", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "link_start", async () => {
       const fromId = requireTelegramUserId(ctx.from?.id);
       const parts = splitCommand(ctx.message?.text, 2);
       const address = parseAddress(requiredPart(parts, 1));
       const result = await dependencies.walletLinkService.beginLink(fromId, address);
-      await ctx.reply(["Sign this message with the owner wallet:", result.message].join("\n\n"));
+      const base = dependencies.config.publicBaseUrl?.replace(/\/$/, "") ?? "http://localhost:3000";
+      const linkUrl = `${base}/link/${encodeURIComponent(result.link.nonce)}`;
+      await ctx.reply(
+        [
+          "One click: open the link below, connect this wallet, and sign.",
+          linkUrl,
+          "",
+          "Manual fallback: sign this message and run /link_submit <ownerAddress> <signature>",
+          result.message
+        ].join("\n")
+      );
     });
   });
 
   bot.command("link_submit", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "link_submit", async () => {
       const fromId = requireTelegramUserId(ctx.from?.id);
       const parts = splitCommand(ctx.message?.text, 3);
       const address = parseAddress(requiredPart(parts, 1));
@@ -116,7 +117,7 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("wallet_set", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "wallet_set", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       await requireGroupAdmin(ctx, chatId);
       const parts = splitCommand(ctx.message?.text, 4);
@@ -132,7 +133,7 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("safe_create", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "safe_create", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       await requireGroupAdmin(ctx, chatId);
       const parts = splitCommand(ctx.message?.text, 3);
@@ -148,7 +149,7 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("safe_group", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "safe_group", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       await requireGroupAdmin(ctx, chatId);
       const fromId = requireTelegramUserId(ctx.from?.id);
@@ -162,7 +163,7 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("safe_group_join", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "safe_group_join", async () => {
       const fromId = requireTelegramUserId(ctx.from?.id);
       const parts = splitCommand(ctx.message?.text, 3);
       const session = await dependencies.safeGroupSetupService.joinWithWallet(
@@ -177,7 +178,7 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("wallet", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "wallet", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       const wallet = await dependencies.groupWalletService.getWallet(chatId);
       if (wallet === null) {
@@ -188,7 +189,7 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("buy", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "buy", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       const fromId = requireTelegramUserId(ctx.from?.id);
       await dependencies.poolService.requireTraderAccess(chatId, fromId);
@@ -211,7 +212,7 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("proposal", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "proposal", async () => {
       const parts = splitCommand(ctx.message?.text, 2);
       const proposalId = requiredPart(parts, 1);
       const proposal = await dependencies.tradeService.getProposal(proposalId);
@@ -223,18 +224,18 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("flap_launch", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "flap_launch", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       await requireGroupAdmin(ctx, chatId);
       const fromId = requireTelegramUserId(ctx.from?.id);
       const commandText = ctx.message?.text;
       if (commandText === undefined) {
-        throw new UserInputError("Missing command text");
+        throw new InvalidInputError();
       }
       const payload = commandText.replace(/^\/flap_launch(@\w+)?\s*/, "");
       const parts = payload.split("|");
       if (parts.length !== 8) {
-        throw new UserInputError("Invalid flap_launch format");
+        throw new InvalidInputError();
       }
       const buyTaxBps = parseBasisPoints(requiredPart(parts, 3), 5000);
       const sellTaxBps = parseBasisPoints(requiredPart(parts, 4), 5000);
@@ -258,17 +259,17 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("flap_metadata", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "flap_metadata", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       await requireGroupAdmin(ctx, chatId);
       const commandText = ctx.message?.text;
       if (commandText === undefined) {
-        throw new UserInputError("Missing command text");
+        throw new InvalidInputError();
       }
       const payload = commandText.replace(/^\/flap_metadata(@\w+)?\s*/, "");
       const parts = payload.split("|");
       if (parts.length < 4 || parts.length > 7) {
-        throw new UserInputError("Invalid flap_metadata format");
+        throw new InvalidInputError();
       }
       const metadataUri = await dependencies.flapMetadataService.createMetadata({
         name: requiredPart(parts, 0),
@@ -284,7 +285,7 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("safe_prepare", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "safe_prepare", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       const parts = splitCommand(ctx.message?.text, 3);
       const sourceType = requiredPart(parts, 1);
@@ -298,16 +299,16 @@ export function createBot(dependencies: BotDependencies): Bot {
               ? await dependencies.safeSubmissionService.prepareWithdrawalSubmission(chatId, sourceId)
               : null;
       if (submission === null) {
-        throw new UserInputError("safe_prepare source must be trade, flap, or withdrawal");
+        throw new InvalidInputError("The source must be trade, flap, or withdrawal.");
       }
       await ctx.reply(formatSafeSubmission(submission, dependencies.config.publicBaseUrl), {
-        reply_markup: safeSubmissionKeyboard(submission.id)
+        reply_markup: safeSubmissionKeyboard(submission.id, dependencies.config.publicBaseUrl)
       });
     });
   });
 
   bot.command("safe_submit", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "safe_submit", async () => {
       const fromId = requireTelegramUserId(ctx.from?.id);
       const parts = splitCommand(ctx.message?.text, 4);
       const submissionId = requiredPart(parts, 1);
@@ -315,13 +316,13 @@ export function createBot(dependencies: BotDependencies): Bot {
       const signature = parseHex(requiredPart(parts, 3), "signature");
       const submission = await dependencies.safeSubmissionService.submitOwnerSignature(submissionId, ownerAddress, signature, fromId);
       await ctx.reply(formatSafeSubmission(submission, dependencies.config.publicBaseUrl), {
-        reply_markup: safeSubmissionKeyboard(submission.id)
+        reply_markup: safeSubmissionKeyboard(submission.id, dependencies.config.publicBaseUrl)
       });
     });
   });
 
   bot.command("safe_status", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "safe_status", async () => {
       const parts = splitCommand(ctx.message?.text, 2);
       const status = await dependencies.safeSubmissionService.getStatus(requiredPart(parts, 1));
       await ctx.reply(formatSafeStatus(status));
@@ -329,12 +330,18 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("safe_execute", async (ctx) => {
-    await handleUserCommand(ctx, async () => {
+    await handleUserCommand(ctx, "safe_execute", async () => {
       const chatId = requireChatId(ctx.chat?.id);
       await requireGroupAdmin(ctx, chatId);
       const parts = splitCommand(ctx.message?.text, 2);
       const txHash = await dependencies.safeSubmissionService.execute(requiredPart(parts, 1));
       await ctx.reply(`Safe execution submitted: ${txHash}`);
+    });
+  });
+
+  bot.command("safe_unlink", async (ctx) => {
+    await handleUserCommand(ctx, "safe_unlink", async () => {
+      await beginUnlink(dependencies, ctx);
     });
   });
 
@@ -349,6 +356,32 @@ export function createBot(dependencies: BotDependencies): Bot {
   registerSafeCallbacks(bot, dependencies);
   registerPoolCommands(bot, dependencies);
 
+  bot.callbackQuery("prompt_back", async (ctx) => {
+    await handlePromptBack(dependencies, ctx);
+  });
+
+  bot.callbackQuery("prompt_cancel", async (ctx) => {
+    await handlePromptCancel(dependencies, ctx);
+  });
+
+  bot.callbackQuery(/^menu:/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    try {
+      await handleMenuSelection(dependencies, ctx, ctx.callbackQuery.data.slice("menu:".length));
+    } catch (error) {
+      if (error instanceof UserInputError || error instanceof AppError) {
+        await ctx.reply(error.message);
+        return;
+      }
+      Logger.error("[TelegramBot] Menu action failed", { err: error instanceof Error ? error : undefined });
+      await ctx.reply("Something went wrong. Please try again.");
+    }
+  });
+
+  bot.on("message:text", async (ctx) => {
+    await routePromptInput(dependencies, ctx);
+  });
+
   bot.on("callback_query:data", async (ctx) => {
     await ctx.answerCallbackQuery();
   });
@@ -358,19 +391,6 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   return bot;
-}
-
-async function handleUserCommand(ctx: Context, action: () => Promise<void>): Promise<void> {
-  try {
-    await action();
-  } catch (error) {
-    if (error instanceof UserInputError || error instanceof AppError) {
-      await ctx.reply(error.message);
-      return;
-    }
-    Logger.error("[TelegramBot] Command failed", { err: error instanceof Error ? error : undefined });
-    await ctx.reply("Command failed");
-  }
 }
 
 async function handleCallback(ctx: Context, action: () => Promise<void>): Promise<void> {
@@ -383,17 +403,5 @@ async function handleCallback(ctx: Context, action: () => Promise<void>): Promis
     }
     Logger.error("[TelegramBot] Callback failed", { err: error instanceof Error ? error : undefined });
     await ctx.answerCallbackQuery({ text: "Action failed", show_alert: true });
-  }
-}
-
-async function sendPrivateMessage(ctx: Context, message: string): Promise<void> {
-  const userId = ctx.from?.id;
-  if (userId === undefined) {
-    throw new UserInputError("Command must be sent by a Telegram user");
-  }
-  try {
-    await ctx.api.sendMessage(userId, message);
-  } catch {
-    throw new UserInputError("Open a private chat with this bot first so it can send your wallet key");
   }
 }

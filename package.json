@@ -14,9 +14,10 @@
     "acceptance:static": "bun src/qa/staticAcceptance.ts",
     "acceptance:live": "bun src/qa/liveAcceptance.ts",
     "sim:full": "bun src/qa/fullSimulation.ts",
+    "smoke:local": "bun src/qa/localSmoke.ts",
     "smoke:live": "bun src/qa/liveSmoke.ts",
     "verify": "bun run typecheck && bun run test && bun run acceptance:static",
-    "verify:full": "bun run verify && bun run build && bun run sim:full && bun run acceptance:live && bun run smoke:live"
+    "verify:full": "bun run verify && bun run build && bun run sim:full && bun run smoke:local && bun run acceptance:live && bun run smoke:live"
   },
   "dependencies": {
     "grammy": "^1.34.0",

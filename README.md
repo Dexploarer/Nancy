@@ -5,9 +5,9 @@ Nancy, the Golden Girl of Binance: a Telegram MVP for BSC group trading wallets 
 ## MVP surface
 
 - Link one Safe-style group wallet per Telegram group.
-- Generate encrypted bot-managed owner wallets or link external Safe owner wallets with signed nonces.
+- Generate non-custodial owner wallets (key shown once by DM, never stored) or link external Safe owner wallets with signed nonces.
 - Restrict group wallet setup, Flap metadata, Flap launches, and execution to Telegram group admins.
-- Collect managed or linked wallets from Telegram group members with inline buttons, then deploy a BSC Safe when `SAFE_EXECUTOR_PRIVATE_KEY` is configured.
+- Collect linked owner wallets from Telegram group members with inline buttons, then deploy a BSC Safe when `SAFE_EXECUTOR_PRIVATE_KEY` is configured.
 - Create group trade proposals for Flap bonding-curve tokens.
 - Route migrated Flap tokens and regular BSC tokens through PancakeSwap V2.
 - Run token risk checks before buy proposals.
@@ -32,7 +32,9 @@ bun run sim:full
 bun run dev
 ```
 
-For production, set `PUBLIC_BASE_URL` and `TELEGRAM_WEBHOOK_SECRET`. The process starts an HTTP server with `/health`, `/telegram/<secret>`, `/sign/<safeSubmissionId>`, and `/pool/<chatId>`.
+For production, set `PUBLIC_BASE_URL` and `TELEGRAM_WEBHOOK_SECRET`. The process starts an HTTP server with `/health`, `/telegram/<secret>`, `/sign/<safeSubmissionId>`, `/link/<nonce>` (one-click wallet linking), and `/pool/<chatId>`.
+
+Guided inline-button flows collect each value from a normal chat message, so in a group the bot's Telegram privacy mode must be disabled (BotFather `/setprivacy`). Slash commands work regardless.
 
 See [docs/production-checklist.md](docs/production-checklist.md) for deployment gates.
 See [docs/qa-test-matrix.md](docs/qa-test-matrix.md) for automated, live-smoke, and manually gated coverage.
@@ -42,13 +44,13 @@ See [docs/qa-test-matrix.md](docs/qa-test-matrix.md) for automated, live-smoke, 
 ```text
 /start
 /wallet_generate
-/wallet_managed
 /link_start <ownerAddress>
 /link_submit <ownerAddress> <signature>
 /safe_group <threshold>
 /safe_group_join <setupId> <ownerAddress>
 /safe_create <threshold> <owner1> [owner2 ...]
 /wallet_set <safeAddress> <threshold> <owner1> [owner2 ...]
+/safe_unlink
 /wallet
 /pool_init
 /pool
@@ -56,6 +58,7 @@ See [docs/qa-test-matrix.md](docs/qa-test-matrix.md) for automated, live-smoke, 
 /pool_role <telegramUserId> <owner|trader|member>
 /pool_deposit <bnbAmount> <txHash>
 /pool_withdraw <basisPoints> <recipientAddress>
+/pool_cancel <withdrawalRequestId>
 /buy <tokenAddress> <bnbAmount> [slippageBps]
 /proposal <proposalId>
 /flap_metadata <name>|<symbol>|<description>|<imageUri>|[website]|[telegram]|[x]
@@ -86,7 +89,7 @@ Example:
 
 `/pool_init` creates the group accounting ledger and makes the caller a pool owner. Owners can use `/pool_role` to assign `owner`, `trader`, or `member`.
 
-Members deposit by sending native BNB directly to the group Safe, then running `/pool_deposit <bnbAmount> <txHash>`. The bot verifies the transaction succeeded, went to the Safe, matches the amount, and came from a linked or managed wallet for that Telegram user before minting shares.
+Members deposit by sending native BNB directly to the group Safe, then running `/pool_deposit <bnbAmount> <txHash>`. The bot verifies the transaction succeeded, went to the Safe, matches the amount, and came from a wallet linked to that Telegram user before minting shares.
 
 Pool ownership is share-based:
 
@@ -106,9 +109,9 @@ Pinata is only needed for `/flap_metadata`, which uploads token metadata JSON an
 
 ## Safe creation flow
 
-`/wallet_generate` creates an encrypted bot-managed owner wallet, links it to the Telegram user, and shows the private key once by DM. Users can also link an external wallet with `/link_start` and `/link_submit`.
+`/wallet_generate` (DM only) creates a non-custodial owner wallet, links its public key to the Telegram user, and shows the private key once. Nancy never stores the private key. Users can also link an external wallet with `/link_start` and `/link_submit`.
 
-`/safe_group <threshold>` starts a group-member collection flow with inline buttons. Each owner taps `Generate + join` for a bot-managed owner wallet or `Join linked wallet` for an external wallet. When enough owners have joined, a group admin taps `Deploy Safe`. The bot deploys a Safe v1.4.1 proxy through SafeProxyFactory on BSC using the configured `SAFE_EXECUTOR_PRIVATE_KEY`.
+`/safe_group <threshold>` starts a group-member collection flow with inline buttons. Each owner taps `Generate wallet + join` to create a non-custodial wallet (private key sent by DM) or `Join linked wallet` for a wallet they already linked. When enough owners have joined, a group admin taps `Deploy Safe`. The bot deploys a Safe v1.4.1 proxy through SafeProxyFactory on BSC using the configured `SAFE_EXECUTOR_PRIVATE_KEY`.
 
 `/safe_create <threshold> <owner1> [owner2 ...]` is the direct address-based deployment path for admins who already know the owner addresses. The executor only pays deployment gas and is not added as a Safe owner. After the deployment receipt emits `ProxyCreation`, the bot stores the new Safe as the group wallet.
 
@@ -119,7 +122,7 @@ If you already have a Safe, use `/wallet_set <safeAddress> <threshold> <owner1> 
 1. Create a trade or Flap launch proposal.
 2. Run `/safe_prepare trade <proposalId>` or `/safe_prepare flap <launchId>`.
 3. The bot returns the Safe transaction hash, transaction service URL, and signing page URL.
-4. A managed owner taps `Approve with managed wallet`, or an external linked owner opens `/sign/<safeSubmissionId>`, signs with the owner wallet, and submits from the page. Telegram Web App init data is verified when present; wallet-browser fallback accepts a manually entered Telegram user ID.
+4. A linked owner opens `/sign/<safeSubmissionId>`, connects the owner wallet, signs, and submits from the page. Telegram Web App init data is verified when present; wallet-browser fallback accepts a manually entered Telegram user ID.
 5. The first valid owner signature proposes the transaction to Safe Transaction Service. Later signatures are added as confirmations.
 6. Use `/safe_status <safeSubmissionId>` to inspect confirmations and execution state.
 7. If `SAFE_EXECUTOR_PRIVATE_KEY` is set, run `/safe_execute <safeSubmissionId>` after threshold is met.
@@ -129,7 +132,7 @@ If you already have a Safe, use `/wallet_set <safeAddress> <threshold> <owner1> 
 - Flap tokens in the bonding-curve phase route through Flap `Portal`.
 - Flap tokens already migrated to DEX and regular BSC tokens route through PancakeSwap V2.
 - Safe Transaction Service submission requires a real Safe owner signature. The bot validates that the signature recovers to a configured owner before submitting it.
-- Bot-managed wallet signing requires `WALLET_ENCRYPTION_KEY`; users still receive the private key once for recovery/export.
+- Nancy is non-custodial and never stores private keys. `/wallet_generate` shows a freshly generated key once by DM; the user imports it into their own wallet to sign.
 - Execution can be done from Safe Wallet or by `/safe_execute` using an optional executor gas key. That key only pays gas; it is not a Safe owner key.
 - `/safe_create` also uses the optional executor gas key. Without it, create the Safe outside the bot and link it with `/wallet_set`.
 - `STORAGE_DRIVER=memory` is for local testing. Use the schema in `db/schema.sql` before production.

@@ -1,6 +1,5 @@
 import type { Address, Hex } from "viem";
 import type {
-  EncryptedPrivateKey,
   SafeCreationOwner,
   SafeCreationSessionStatus,
   SafeSubmissionSourceType,
@@ -43,12 +42,13 @@ export type WalletLinkRow = {
   linked_at: Date | null;
 };
 
-export type ManagedWalletRow = {
+export type PendingPromptRow = {
+  chat_id: string;
   telegram_user_id: string;
-  address: Address;
-  encrypted_private_key: EncryptedPrivateKey;
+  command: string;
+  collected: string[];
   created_at: Date;
-  last_used_at: Date | null;
+  updated_at: Date;
 };
 
 export type SafeCreationSessionRow = {

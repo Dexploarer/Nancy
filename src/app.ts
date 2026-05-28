@@ -13,8 +13,6 @@ import { TokenRiskService } from "./services/tokenRiskService.js";
 import { FlapMetadataService } from "./services/flapMetadataService.js";
 import { SafeDeploymentService } from "./services/safeDeploymentService.js";
 import { SafeGroupSetupService } from "./services/safeGroupSetupService.js";
-import { WalletEncryptionService } from "./services/walletEncryptionService.js";
-import { ManagedWalletService } from "./services/managedWalletService.js";
 import { PoolService } from "./services/poolService.js";
 import { DepositVerificationService } from "./services/depositVerificationService.js";
 import { MemoryRepository } from "./storage/memoryRepository.js";
@@ -32,7 +30,6 @@ export type App = {
   safeSubmissionService: SafeSubmissionService;
   safeDeploymentService: SafeDeploymentService;
   safeGroupSetupService: SafeGroupSetupService;
-  managedWalletService: ManagedWalletService;
   poolService: PoolService;
   depositVerificationService: DepositVerificationService;
   walletLinkService: WalletLinkService;
@@ -55,8 +52,6 @@ export function buildApp(config: AppConfig): App {
   );
   const groupWalletService = new GroupWalletService(repository);
   const walletLinkService = new WalletLinkService(repository);
-  const walletEncryptionService = new WalletEncryptionService(config.walletEncryptionKey);
-  const managedWalletService = new ManagedWalletService(repository, walletEncryptionService);
   const poolService = new PoolService(repository, poolRepository, config.poolWithdrawalFeeBps);
   const depositVerificationService = new DepositVerificationService(config.bscRpcUrl, config.bscChainId);
   const safeDeploymentService = new SafeDeploymentService(
@@ -65,7 +60,7 @@ export function buildApp(config: AppConfig): App {
     config.bscChainId,
     config.safeExecutorPrivateKey
   );
-  const safeGroupSetupService = new SafeGroupSetupService(repository, safeDeploymentService, managedWalletService);
+  const safeGroupSetupService = new SafeGroupSetupService(repository, safeDeploymentService, walletLinkService);
   const tokenRiskService = new TokenRiskService({
     mode: config.riskCheckMode,
     minLiquidityUsd: config.minLiquidityUsd,
@@ -86,7 +81,6 @@ export function buildApp(config: AppConfig): App {
     repository,
     groupWalletService,
     walletLinkService,
-    managedWalletService,
     tradeService,
     flapLaunchService,
     flapMetadataService,
@@ -103,7 +97,6 @@ export function buildApp(config: AppConfig): App {
     safeSubmissionService,
     safeDeploymentService,
     safeGroupSetupService,
-    managedWalletService,
     poolService,
     depositVerificationService,
     walletLinkService,

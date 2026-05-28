@@ -18,7 +18,6 @@ const EnvSchema = z
     SAFE_TRANSACTION_SERVICE_URL: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
     SAFE_API_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional()),
     SAFE_EXECUTOR_PRIVATE_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional()),
-    WALLET_ENCRYPTION_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional()),
     DEX_DEADLINE_SECONDS: z.coerce.number().int().min(60).max(604800),
     HTTP_PORT: z.coerce.number().int().min(1).max(65535),
     PUBLIC_BASE_URL: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
@@ -53,7 +52,6 @@ export type AppConfig = {
   safeTransactionServiceUrl?: string;
   safeApiKey?: string;
   safeExecutorPrivateKey?: `0x${string}`;
-  walletEncryptionKey?: `0x${string}`;
   dexDeadlineSeconds: number;
   httpPort: number;
   publicBaseUrl?: string;
@@ -81,7 +79,6 @@ export function loadConfig(): AppConfig {
     ...(env.SAFE_TRANSACTION_SERVICE_URL === undefined ? {} : { safeTransactionServiceUrl: env.SAFE_TRANSACTION_SERVICE_URL }),
     ...(env.SAFE_API_KEY === undefined ? {} : { safeApiKey: env.SAFE_API_KEY }),
     ...(env.SAFE_EXECUTOR_PRIVATE_KEY === undefined ? {} : { safeExecutorPrivateKey: env.SAFE_EXECUTOR_PRIVATE_KEY as `0x${string}` }),
-    ...(env.WALLET_ENCRYPTION_KEY === undefined ? {} : { walletEncryptionKey: env.WALLET_ENCRYPTION_KEY as `0x${string}` }),
     dexDeadlineSeconds: env.DEX_DEADLINE_SECONDS,
     httpPort: env.HTTP_PORT,
     ...(env.PUBLIC_BASE_URL === undefined ? {} : { publicBaseUrl: env.PUBLIC_BASE_URL }),

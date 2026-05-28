@@ -2,7 +2,7 @@ import type {
   ChatId,
   FlapLaunchProposal,
   GroupWallet,
-  ManagedWallet,
+  PendingPrompt,
   SafeCreationSession,
   SafeSubmission,
   TradeProposal,
@@ -12,11 +12,14 @@ import type {
 export interface Repository {
   getGroupWallet(chatId: ChatId): Promise<GroupWallet | null>;
   saveGroupWallet(wallet: GroupWallet): Promise<void>;
+  deleteGroupWallet(chatId: ChatId): Promise<void>;
+  getPendingPrompt(chatId: ChatId, telegramUserId: string): Promise<PendingPrompt | null>;
+  savePendingPrompt(prompt: PendingPrompt): Promise<void>;
+  deletePendingPrompt(chatId: ChatId, telegramUserId: string): Promise<void>;
   getWalletLink(telegramUserId: string, address: string): Promise<WalletLink | null>;
+  getWalletLinkByNonce(nonce: string): Promise<WalletLink | null>;
   getLinkedWalletsByTelegramUserId(telegramUserId: string): Promise<WalletLink[]>;
   saveWalletLink(link: WalletLink): Promise<void>;
-  getManagedWallet(telegramUserId: string): Promise<ManagedWallet | null>;
-  saveManagedWallet(wallet: ManagedWallet): Promise<void>;
   getSafeCreationSession(id: string): Promise<SafeCreationSession | null>;
   saveSafeCreationSession(session: SafeCreationSession): Promise<void>;
   getTradeProposal(id: string): Promise<TradeProposal | null>;

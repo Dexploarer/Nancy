@@ -3,7 +3,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { getBscContractAddresses } from "../chain/addresses.js";
 import { SafeService, type SafeTransactionServiceStatus } from "../chain/safeService.js";
 import type { SafeConfirmation } from "../chain/safeSignatures.js";
-import type { ChainTransaction, ManagedWallet, SafeSubmission, SafeTransactionData } from "../domain/types.js";
+import type { ChainTransaction, SafeSubmission, SafeTransactionData } from "../domain/types.js";
 import { UserInputError } from "../domain/errors.js";
 import type {
   NativeDepositClient,
@@ -11,11 +11,10 @@ import type {
   NativeDepositTransaction
 } from "../services/depositVerificationService.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
-import { ManagedWalletService } from "../services/managedWalletService.js";
 import { PoolService } from "../services/poolService.js";
 import { SafeDeploymentService, type CreateSafeInput, type SafeDeployment } from "../services/safeDeploymentService.js";
 import { SafeSubmissionService } from "../services/safeSubmissionService.js";
-import { WalletEncryptionService } from "../services/walletEncryptionService.js";
+import { WalletLinkService, buildWalletLinkMessage } from "../services/walletLinkService.js";
 import { MemoryRepository } from "../storage/memoryRepository.js";
 import { parseHex } from "../utils/evm.js";
 
@@ -213,42 +212,35 @@ export async function verifyAndCreditDeposit(input: {
   });
 }
 
+export type SimulationWallet = {
+  telegramUserId: string;
+  address: Address;
+  privateKey: Hex;
+};
+
 export async function createSimulationWallet(
-  repository: MemoryRepository,
-  walletEncryptionService: WalletEncryptionService,
+  walletLinkService: WalletLinkService,
   telegramUserId: string,
   privateKeyIndex: number
-): Promise<ManagedWallet> {
+): Promise<SimulationWallet> {
   const privateKey = simulationPrivateKey(privateKeyIndex);
   const account = privateKeyToAccount(privateKey);
-  const createdAt = new Date("2026-05-27T00:00:00.000Z");
-  const wallet: ManagedWallet = {
-    telegramUserId,
-    address: account.address,
-    encryptedPrivateKey: walletEncryptionService.encrypt(privateKey),
-    createdAt
-  };
-  await repository.saveManagedWallet(wallet);
-  await repository.saveWalletLink({
-    telegramUserId,
-    address: wallet.address,
-    nonce: `sim:${telegramUserId}`,
-    status: "linked",
-    createdAt,
-    linkedAt: createdAt
-  });
-  return wallet;
+  // Exercise the real non-custodial linking proof path: begin, sign with the
+  // owner's own key, then complete. Nancy never sees the private key.
+  const { link } = await walletLinkService.beginLink(telegramUserId, account.address);
+  const signature = await account.signMessage({ message: buildWalletLinkMessage(link) });
+  await walletLinkService.completeLink(telegramUserId, account.address, signature);
+  return { telegramUserId, address: account.address, privateKey };
 }
 
-export async function submitManagedSignature(
+export async function submitOwnerSignature(
   safeSubmissionService: SafeSubmissionService,
-  managedWalletService: ManagedWalletService,
   submission: SafeSubmission,
-  telegramUserId: string,
-  ownerAddress: Address
+  wallet: SimulationWallet
 ): Promise<void> {
-  const signed = await managedWalletService.signSafeHash(telegramUserId, submission.safeTxHash);
-  await safeSubmissionService.submitOwnerSignature(submission.id, ownerAddress, signed.signature, telegramUserId);
+  const account = privateKeyToAccount(wallet.privateKey);
+  const signature = await account.signMessage({ message: { raw: submission.safeTxHash } });
+  await safeSubmissionService.submitOwnerSignature(submission.id, wallet.address, signature, wallet.telegramUserId);
 }
 
 export async function expectFailure<T>(action: Promise<T>): Promise<boolean> {

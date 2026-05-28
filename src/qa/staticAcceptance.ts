@@ -4,6 +4,7 @@ import { getBscContractAddresses, NATIVE_TOKEN_ADDRESS } from "../chain/addresse
 import { AppError } from "../domain/errors.js";
 import type { SafeSubmission } from "../domain/types.js";
 import { renderSigningPage } from "../http/signingPage.js";
+import { renderLinkPage } from "../http/linkPage.js";
 import { Logger } from "../logger.js";
 import { SafeDeploymentService } from "../services/safeDeploymentService.js";
 
@@ -35,6 +36,17 @@ if (setupCall.functionName !== "setup") {
 const signingPage = renderSigningPage(sampleSubmission());
 if (!signingPage.includes("/api/safe-submissions/") || signingPage.includes("/safe_submit")) {
   throw new AppError("Signing page does not submit through the HTTP API");
+}
+
+const linkPage = renderLinkPage({
+  telegramUserId: "123",
+  address: "0x1111111111111111111111111111111111111111",
+  nonce: "static-acceptance-nonce",
+  status: "pending",
+  createdAt: new Date("2026-05-27T00:00:00.000Z")
+});
+if (!linkPage.includes("/api/wallet-links/") || !linkPage.includes("personal_sign")) {
+  throw new AppError("Link page does not submit a personal_sign through the HTTP API");
 }
 
 Logger.info("[StaticAcceptance] Static acceptance checks passed", {

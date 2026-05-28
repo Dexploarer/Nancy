@@ -2,7 +2,7 @@ import type {
   ChatId,
   FlapLaunchProposal,
   GroupWallet,
-  ManagedWallet,
+  PendingPrompt,
   SafeCreationSession,
   SafeSubmission,
   TradeProposal,
@@ -13,7 +13,7 @@ import type { Repository } from "./repository.js";
 export class MemoryRepository implements Repository {
   private readonly groupWallets = new Map<ChatId, GroupWallet>();
   private readonly walletLinks = new Map<string, WalletLink>();
-  private readonly managedWallets = new Map<string, ManagedWallet>();
+  private readonly pendingPrompts = new Map<string, PendingPrompt>();
   private readonly safeCreationSessions = new Map<string, SafeCreationSession>();
   private readonly tradeProposals = new Map<string, TradeProposal>();
   private readonly flapLaunches = new Map<string, FlapLaunchProposal>();
@@ -27,8 +27,28 @@ export class MemoryRepository implements Repository {
     this.groupWallets.set(wallet.chatId, wallet);
   }
 
+  async deleteGroupWallet(chatId: ChatId): Promise<void> {
+    this.groupWallets.delete(chatId);
+  }
+
+  async getPendingPrompt(chatId: ChatId, telegramUserId: string): Promise<PendingPrompt | null> {
+    return this.pendingPrompts.get(promptKey(chatId, telegramUserId)) ?? null;
+  }
+
+  async savePendingPrompt(prompt: PendingPrompt): Promise<void> {
+    this.pendingPrompts.set(promptKey(prompt.chatId, prompt.telegramUserId), prompt);
+  }
+
+  async deletePendingPrompt(chatId: ChatId, telegramUserId: string): Promise<void> {
+    this.pendingPrompts.delete(promptKey(chatId, telegramUserId));
+  }
+
   async getWalletLink(telegramUserId: string, address: string): Promise<WalletLink | null> {
     return this.walletLinks.get(walletLinkKey(telegramUserId, address)) ?? null;
+  }
+
+  async getWalletLinkByNonce(nonce: string): Promise<WalletLink | null> {
+    return [...this.walletLinks.values()].find((link) => link.nonce === nonce) ?? null;
   }
 
   async saveWalletLink(link: WalletLink): Promise<void> {
@@ -37,14 +57,6 @@ export class MemoryRepository implements Repository {
 
   async getLinkedWalletsByTelegramUserId(telegramUserId: string): Promise<WalletLink[]> {
     return [...this.walletLinks.values()].filter((link) => link.telegramUserId === telegramUserId && link.status === "linked");
-  }
-
-  async getManagedWallet(telegramUserId: string): Promise<ManagedWallet | null> {
-    return this.managedWallets.get(telegramUserId) ?? null;
-  }
-
-  async saveManagedWallet(wallet: ManagedWallet): Promise<void> {
-    this.managedWallets.set(wallet.telegramUserId, wallet);
   }
 
   async getSafeCreationSession(id: string): Promise<SafeCreationSession | null> {
@@ -82,4 +94,8 @@ export class MemoryRepository implements Repository {
 
 function walletLinkKey(telegramUserId: string, address: string): string {
   return `${telegramUserId}:${address.toLowerCase()}`;
+}
+
+function promptKey(chatId: ChatId, telegramUserId: string): string {
+  return `${chatId}:${telegramUserId}`;
 }
