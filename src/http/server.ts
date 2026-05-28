@@ -99,6 +99,10 @@ export async function startHttpRuntime(appState: App, config: AppConfig): Promis
 
   Logger.info("[HttpRuntime] HTTP server listening", { port: config.httpPort });
 
+  if (config.depositWatchEnabled) {
+    appState.depositWatcher.start();
+  }
+
   if (config.publicBaseUrl !== undefined && config.telegramWebhookSecret !== undefined) {
     const webhookUrl = `${config.publicBaseUrl.replace(/\/$/, "")}/telegram/${config.telegramWebhookSecret}`;
     await appState.bot.api.setWebhook(webhookUrl);

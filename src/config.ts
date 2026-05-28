@@ -24,6 +24,7 @@ const EnvSchema = z
     WALLETCONNECT_PROJECT_ID: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional()),
     TELEGRAM_WEBHOOK_SECRET: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(16).optional()),
     PINATA_JWT: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional()),
+    DEPOSIT_WATCH: z.enum(["on", "off"]).default("off"),
     RISK_CHECK_MODE: z.enum(["warn", "block"]),
     MIN_LIQUIDITY_USD: z.coerce.number().min(0),
     MAX_BUY_TAX_BPS: z.coerce.number().int().min(0).max(10000),
@@ -59,6 +60,7 @@ export type AppConfig = {
   walletConnectProjectId?: string;
   telegramWebhookSecret?: string;
   pinataJwt?: string;
+  depositWatchEnabled: boolean;
   riskCheckMode: "warn" | "block";
   minLiquidityUsd: number;
   maxBuyTaxBps: number;
@@ -87,6 +89,7 @@ export function loadConfig(): AppConfig {
     ...(env.WALLETCONNECT_PROJECT_ID === undefined ? {} : { walletConnectProjectId: env.WALLETCONNECT_PROJECT_ID }),
     ...(env.TELEGRAM_WEBHOOK_SECRET === undefined ? {} : { telegramWebhookSecret: env.TELEGRAM_WEBHOOK_SECRET }),
     ...(env.PINATA_JWT === undefined ? {} : { pinataJwt: env.PINATA_JWT }),
+    depositWatchEnabled: env.DEPOSIT_WATCH === "on",
     riskCheckMode: env.RISK_CHECK_MODE,
     minLiquidityUsd: env.MIN_LIQUIDITY_USD,
     maxBuyTaxBps: env.MAX_BUY_TAX_BPS,

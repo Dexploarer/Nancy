@@ -11,6 +11,7 @@ import type {
 
 export interface Repository {
   getGroupWallet(chatId: ChatId): Promise<GroupWallet | null>;
+  listGroupWallets(): Promise<GroupWallet[]>;
   saveGroupWallet(wallet: GroupWallet): Promise<void>;
   deleteGroupWallet(chatId: ChatId): Promise<void>;
   getPendingPrompt(chatId: ChatId, telegramUserId: string): Promise<PendingPrompt | null>;
@@ -19,6 +20,7 @@ export interface Repository {
   getWalletLink(telegramUserId: string, address: string): Promise<WalletLink | null>;
   getWalletLinkByNonce(nonce: string): Promise<WalletLink | null>;
   getLinkedWalletsByTelegramUserId(telegramUserId: string): Promise<WalletLink[]>;
+  getLinkedWalletsByAddress(address: string): Promise<WalletLink[]>;
   saveWalletLink(link: WalletLink): Promise<void>;
   getSafeCreationSession(id: string): Promise<SafeCreationSession | null>;
   saveSafeCreationSession(session: SafeCreationSession): Promise<void>;

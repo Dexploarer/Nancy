@@ -23,6 +23,10 @@ export class MemoryRepository implements Repository {
     return this.groupWallets.get(chatId) ?? null;
   }
 
+  async listGroupWallets(): Promise<GroupWallet[]> {
+    return [...this.groupWallets.values()];
+  }
+
   async saveGroupWallet(wallet: GroupWallet): Promise<void> {
     this.groupWallets.set(wallet.chatId, wallet);
   }
@@ -57,6 +61,12 @@ export class MemoryRepository implements Repository {
 
   async getLinkedWalletsByTelegramUserId(telegramUserId: string): Promise<WalletLink[]> {
     return [...this.walletLinks.values()].filter((link) => link.telegramUserId === telegramUserId && link.status === "linked");
+  }
+
+  async getLinkedWalletsByAddress(address: string): Promise<WalletLink[]> {
+    return [...this.walletLinks.values()].filter(
+      (link) => link.address.toLowerCase() === address.toLowerCase() && link.status === "linked"
+    );
   }
 
   async getSafeCreationSession(id: string): Promise<SafeCreationSession | null> {

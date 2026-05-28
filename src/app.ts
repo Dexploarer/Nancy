@@ -13,6 +13,8 @@ import { TokenRiskService } from "./services/tokenRiskService.js";
 import { FlapMetadataService } from "./services/flapMetadataService.js";
 import { SafeDeploymentService } from "./services/safeDeploymentService.js";
 import { SafeGroupSetupService } from "./services/safeGroupSetupService.js";
+import { DepositWatcher } from "./services/depositWatcher.js";
+import { notifyGroup } from "./services/notify.js";
 import { PoolService } from "./services/poolService.js";
 import { DepositVerificationService } from "./services/depositVerificationService.js";
 import { MemoryRepository } from "./storage/memoryRepository.js";
@@ -34,6 +36,7 @@ export type App = {
   depositVerificationService: DepositVerificationService;
   walletLinkService: WalletLinkService;
   flapMetadataService: FlapMetadataService;
+  depositWatcher: DepositWatcher;
 };
 
 export function buildApp(config: AppConfig): App {
@@ -91,6 +94,13 @@ export function buildApp(config: AppConfig): App {
     safeSubmissionService,
     config
   });
+  const depositWatcher = new DepositWatcher(
+    repository,
+    poolService,
+    (chatId, text) => notifyGroup(bot, chatId, text),
+    config.bscRpcUrl,
+    config.bscChainId
+  );
   return {
     bot,
     repository,
@@ -100,7 +110,8 @@ export function buildApp(config: AppConfig): App {
     poolService,
     depositVerificationService,
     walletLinkService,
-    flapMetadataService
+    flapMetadataService,
+    depositWatcher
   };
 }
 

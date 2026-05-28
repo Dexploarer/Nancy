@@ -22,6 +22,7 @@ function smokeConfig(): AppConfig {
     poolWithdrawalFeeBps: 25,
     dexDeadlineSeconds: 86400,
     httpPort: 0,
+    depositWatchEnabled: false,
     riskCheckMode: "warn",
     minLiquidityUsd: 1000,
     maxBuyTaxBps: 1500,

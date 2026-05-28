@@ -54,6 +54,19 @@ export class PostgresRepository implements Repository {
     };
   }
 
+  async listGroupWallets(): Promise<GroupWallet[]> {
+    const result = await this.pool.query<GroupWalletRow>(
+      "select chat_id, safe_address, threshold, owners, created_at from group_wallets"
+    );
+    return result.rows.map((row) => ({
+      chatId: row.chat_id,
+      safeAddress: row.safe_address,
+      threshold: row.threshold,
+      owners: row.owners,
+      createdAt: row.created_at
+    }));
+  }
+
   async saveGroupWallet(wallet: GroupWallet): Promise<void> {
     await this.pool.query(
       `insert into group_wallets(chat_id, safe_address, threshold, owners, created_at)
@@ -157,6 +170,22 @@ export class PostgresRepository implements Repository {
       `select telegram_user_id, address, nonce, status, created_at, linked_at
        from wallet_links where telegram_user_id = $1 and status = 'linked'`,
       [telegramUserId]
+    );
+    return result.rows.map((row) => ({
+      telegramUserId: row.telegram_user_id,
+      address: row.address,
+      nonce: row.nonce,
+      status: row.status,
+      createdAt: row.created_at,
+      ...(row.linked_at === null ? {} : { linkedAt: row.linked_at })
+    }));
+  }
+
+  async getLinkedWalletsByAddress(address: string): Promise<WalletLink[]> {
+    const result = await this.pool.query<WalletLinkRow>(
+      `select telegram_user_id, address, nonce, status, created_at, linked_at
+       from wallet_links where lower(address) = lower($1) and status = 'linked'`,
+      [address]
     );
     return result.rows.map((row) => ({
       telegramUserId: row.telegram_user_id,
