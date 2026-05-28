@@ -1,4 +1,5 @@
 import { Pool as PgPool } from "pg";
+import { buildPgPoolConfig } from "./pgPoolConfig.js";
 import type { Address, Hex } from "viem";
 import type {
   ChatId,
@@ -70,7 +71,7 @@ export class PostgresPoolRepository implements PoolRepository {
   private readonly pool: PgPool;
 
   constructor(databaseUrl: string) {
-    this.pool = new PgPool({ connectionString: databaseUrl });
+    this.pool = new PgPool(buildPgPoolConfig(databaseUrl));
   }
 
   async getPoolMember(chatId: ChatId, telegramUserId: string): Promise<PoolMember | null> {

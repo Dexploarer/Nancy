@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { buildPgPoolConfig } from "./pgPoolConfig.js";
 import type {
   ChatId,
   FlapLaunchProposal,
@@ -32,7 +33,7 @@ export class PostgresRepository implements Repository {
   private readonly pool: Pool;
 
   constructor(databaseUrl: string) {
-    this.pool = new Pool({ connectionString: databaseUrl });
+    this.pool = new Pool(buildPgPoolConfig(databaseUrl));
   }
 
   async getGroupWallet(chatId: ChatId): Promise<GroupWallet | null> {
