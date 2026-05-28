@@ -7,6 +7,8 @@ import { Logger } from "../logger.js";
 import { parseAddress, parseHex } from "../utils/evm.js";
 import { renderSigningPage } from "./signingPage.js";
 import { renderLinkPage, renderLinkStartPage } from "./linkPage.js";
+import { renderDeployPage } from "./deployPage.js";
+import { saltNonceForSession } from "../services/safeDeploymentService.js";
 import { renderPoolPage } from "./poolPage.js";
 import { verifyTelegramInitData } from "./telegramInitData.js";
 import { serializePoolAnalytics } from "./poolAnalyticsResponse.js";
@@ -27,6 +29,12 @@ const CreateWalletLinkPayloadSchema = z.object({
   telegramUserId: z.string().regex(/^\d+$/).optional(),
   telegramInitData: z.string().optional(),
   address: z.string().min(1)
+});
+
+const SafeDeploymentPayloadSchema = z.object({
+  telegramUserId: z.string().regex(/^\d+$/).optional(),
+  telegramInitData: z.string().optional(),
+  transactionHash: z.string().regex(/^0x[0-9a-fA-F]+$/)
 });
 
 export function createFetchHandler(appState: App, config: AppConfig): (request: Request) => Response | Promise<Response> {
@@ -51,6 +59,9 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
     if (request.method === "GET" && url.pathname.startsWith("/link/")) {
       return route(async () => renderWalletLinkPage(appState, url.pathname, config.walletConnectProjectId, config.bscChainId));
     }
+    if (request.method === "GET" && url.pathname.startsWith("/deploy/")) {
+      return route(async () => renderDeploySafePage(appState, config, url.pathname));
+    }
     if (request.method === "GET" && url.pathname.startsWith("/pool/")) {
       return route(async () => renderPoolAnalyticsPage(url.pathname));
     }
@@ -65,6 +76,9 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
     }
     if (request.method === "POST" && url.pathname.startsWith("/api/safe-submissions/")) {
       return route(async () => submitSafeSignature(appState, config, request, url.pathname));
+    }
+    if (request.method === "POST" && url.pathname.startsWith("/api/safe-deployments/")) {
+      return route(async () => submitSafeDeployment(appState, config, request, url.pathname));
     }
     if (request.method === "POST" && webhookPath !== undefined && url.pathname === webhookPath && webhookHandler !== undefined) {
       return webhookHandler(request);
@@ -114,6 +128,28 @@ async function renderWalletLinkPage(appState: App, pathname: string, walletConne
   });
 }
 
+async function renderDeploySafePage(appState: App, config: AppConfig, pathname: string): Promise<Response> {
+  const sessionId = requiredPathSuffix(pathname, "/deploy/");
+  const session = await appState.safeGroupSetupService.getSession(sessionId);
+  if (session.status !== "collecting") {
+    throw new UserInputError("This Safe setup is no longer collecting owners");
+  }
+  const owners = session.owners.map((owner) => owner.address);
+  const deployment = appState.safeDeploymentService.buildDeploymentTransaction(owners, session.threshold, saltNonceForSession(sessionId));
+  return new Response(
+    renderDeployPage({
+      sessionId,
+      owners,
+      threshold: session.threshold,
+      to: deployment.to,
+      data: deployment.data,
+      ...(config.walletConnectProjectId === undefined ? {} : { walletConnectProjectId: config.walletConnectProjectId }),
+      chainId: config.bscChainId
+    }),
+    { headers: { "Content-Type": "text/html; charset=utf-8" } }
+  );
+}
+
 async function submitWalletLinkSignature(appState: App, request: Request, pathname: string): Promise<Response> {
   const nonce = requiredApiWalletLinkNonce(pathname);
   const payload = await parseWalletLinkBody(request);
@@ -129,6 +165,24 @@ async function createWalletLink(appState: App, config: AppConfig, request: Reque
   const telegramUserId = resolveTelegramUserIdFromBody(payload, config);
   const { link, message } = await appState.walletLinkService.beginLink(telegramUserId, parseAddress(payload.address));
   return Response.json({ nonce: link.nonce, message });
+}
+
+// Verify a Safe an owner deployed from their own wallet, then link it to the group.
+async function submitSafeDeployment(appState: App, config: AppConfig, request: Request, pathname: string): Promise<Response> {
+  const sessionId = requiredPathSuffix(pathname, "/api/safe-deployments/");
+  const payload = await parseSafeDeploymentBody(request);
+  resolveTelegramUserIdFromBody(payload, config);
+  const session = await appState.safeGroupSetupService.getSession(sessionId);
+  const owners = session.owners.map((owner) => owner.address);
+  const transactionHash = parseHex(payload.transactionHash, "transactionHash");
+  const { safeAddress } = await appState.safeDeploymentService.verifyWalletDeployment(
+    owners,
+    session.threshold,
+    saltNonceForSession(sessionId),
+    transactionHash
+  );
+  const result = await appState.safeGroupSetupService.finalizeDeployment(sessionId, safeAddress, transactionHash);
+  return Response.json({ safeAddress: result.wallet.safeAddress });
 }
 
 async function renderPoolAnalyticsPage(pathname: string): Promise<Response> {
@@ -171,7 +225,10 @@ function resolveTelegramUserId(payload: z.infer<typeof SignaturePayloadSchema>, 
   throw new UserInputError("Telegram user identity is required");
 }
 
-function resolveTelegramUserIdFromBody(payload: z.infer<typeof CreateWalletLinkPayloadSchema>, config: AppConfig): string {
+function resolveTelegramUserIdFromBody(
+  payload: { telegramUserId?: string | undefined; telegramInitData?: string | undefined },
+  config: AppConfig
+): string {
   if (payload.telegramInitData !== undefined && payload.telegramInitData.length > 0) {
     return verifyTelegramInitData(payload.telegramInitData, config.telegramBotToken);
   }
@@ -279,6 +336,17 @@ async function parseCreateWalletLinkBody(request: Request): Promise<z.infer<type
   } catch (error) {
     if (error instanceof z.ZodError || error instanceof SyntaxError) {
       throw new UserInputError("Invalid wallet-link request body");
+    }
+    throw error;
+  }
+}
+
+async function parseSafeDeploymentBody(request: Request): Promise<z.infer<typeof SafeDeploymentPayloadSchema>> {
+  try {
+    return SafeDeploymentPayloadSchema.parse(await request.json());
+  } catch (error) {
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
+      throw new UserInputError("Invalid Safe deployment body");
     }
     throw error;
   }

@@ -4,7 +4,9 @@ import {
   createWalletClient,
   encodeFunctionData,
   http,
+  keccak256,
   parseEventLogs,
+  stringToBytes,
   type Address,
   type Hex,
   type PublicClient
@@ -86,6 +88,36 @@ export class SafeDeploymentService {
     };
   }
 
+  // Verify a Safe that an owner deployed from their own wallet. Re-derives the
+  // exact calldata the bot would have built for this session and requires the
+  // on-chain transaction to match it byte-for-byte and target the real factory,
+  // so a tampered deploy (different owners/threshold) can never be linked.
+  async verifyWalletDeployment(
+    owners: Address[],
+    threshold: number,
+    saltNonce: bigint,
+    transactionHash: Hex
+  ): Promise<{ safeAddress: Address }> {
+    const expected = this.buildDeploymentTransaction(owners, threshold, saltNonce);
+    const transaction = await this.publicClient.getTransaction({ hash: transactionHash });
+    assertDeploymentMatches({
+      actualTo: transaction.to,
+      actualInput: transaction.input,
+      expectedTo: expected.to,
+      expectedData: expected.data
+    });
+    const receipt = await this.publicClient.getTransactionReceipt({ hash: transactionHash });
+    if (receipt.status !== "success") {
+      throw new UserInputError("Deployment transaction has not succeeded yet");
+    }
+    const events = parseEventLogs({ abi: safeProxyFactoryAbi, eventName: "ProxyCreation", logs: receipt.logs });
+    const event = events.find((item) => item.address.toLowerCase() === this.addresses.safeProxyFactory.toLowerCase());
+    if (event === undefined) {
+      throw new AppError("Deployment transaction did not create a Safe proxy", { transactionHash });
+    }
+    return { safeAddress: event.args.proxy };
+  }
+
   buildDeploymentTransaction(owners: Address[], threshold: number, saltNonce: bigint): ChainTransaction & { saltNonce: bigint } {
     assertSafeOwners(owners, threshold);
     const initializer = buildSafeInitializer(this.addresses.safeFallbackHandler, owners, threshold);
@@ -100,6 +132,26 @@ export class SafeDeploymentService {
       }),
       saltNonce
     };
+  }
+}
+
+// Deterministic salt per setup session so the deploy calldata is reproducible
+// and verifiable without storing extra state.
+export function saltNonceForSession(sessionId: string): bigint {
+  return BigInt(keccak256(stringToBytes(sessionId)));
+}
+
+export function assertDeploymentMatches(params: {
+  actualTo: string | null | undefined;
+  actualInput: string;
+  expectedTo: string;
+  expectedData: string;
+}): void {
+  if ((params.actualTo ?? "").toLowerCase() !== params.expectedTo.toLowerCase()) {
+    throw new UserInputError("Deployment transaction was not sent to the Safe proxy factory");
+  }
+  if (params.actualInput.toLowerCase() !== params.expectedData.toLowerCase()) {
+    throw new UserInputError("Deployment transaction does not match the approved owners and threshold");
   }
 }
 

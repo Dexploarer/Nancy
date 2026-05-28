@@ -63,4 +63,24 @@ describe("SafeGroupSetupService", () => {
     const stored = await repository.getWalletLink("111", result.generated.link.address);
     expect(stored?.status).toBe("linked");
   });
+
+  it("finalizeDeployment links an owner-deployed Safe without the bot key", async () => {
+    const repository = new MemoryRepository();
+    const fakeDeployment = new FakeSafeDeploymentService();
+    const service = new SafeGroupSetupService(repository, fakeDeployment as never, new WalletLinkService(repository));
+    const setup = await service.createSession("chat", "admin", 1);
+    await service.generateWalletAndJoin(setup.id, "111");
+
+    const result = await service.finalizeDeployment(
+      setup.id,
+      "0x8888888888888888888888888888888888888888",
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    );
+
+    expect(result.session.status).toBe("deployed");
+    expect(result.wallet.safeAddress).toBe("0x8888888888888888888888888888888888888888");
+    expect((await repository.getGroupWallet("chat"))?.safeAddress).toBe("0x8888888888888888888888888888888888888888");
+    // the bot never deployed — no executor key was used
+    expect(fakeDeployment.createSafe).toHaveBeenCalledTimes(0);
+  });
 });

@@ -88,6 +88,12 @@ export function safeSubmissionKeyboard(submissionId: string, publicBaseUrl: stri
   return pageOpenButton("Open & sign", `${baseUrl(publicBaseUrl)}/sign/${encodeURIComponent(submissionId)}`, preferWebApp);
 }
 
+// Deploy-from-your-wallet button: opens the page that sends the deploy tx from the
+// owner's own wallet (no bot key). The page needs no initData, so a URL button works.
+export function deployPageKeyboard(sessionId: string, publicBaseUrl: string | undefined, preferWebApp: boolean): InlineKeyboard {
+  return pageOpenButton("Connect & deploy Safe", `${baseUrl(publicBaseUrl)}/deploy/${encodeURIComponent(sessionId)}`, preferWebApp);
+}
+
 export function poolAppKeyboard(chatId: string, publicBaseUrl?: string): InlineKeyboard {
   const url = `${publicBaseUrl?.replace(/\/$/, "") ?? "http://localhost:3000"}/pool/${encodeURIComponent(chatId)}`;
   return new InlineKeyboard().webApp("Open analytics", url).url("Open in browser", url);

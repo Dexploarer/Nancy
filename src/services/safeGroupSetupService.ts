@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 import { UserInputError } from "../domain/errors.js";
 import type { ChatId, GroupWallet, SafeCreationSession } from "../domain/types.js";
 import type { Repository } from "../storage/repository.js";
@@ -88,14 +88,28 @@ export class SafeGroupSetupService {
         owners: session.owners.length
       });
     }
-    const ownerAddresses = session.owners.map((owner) => owner.address);
     const deployment = await this.safeDeploymentService.createSafe({
-      owners: ownerAddresses,
+      owners: session.owners.map((owner) => owner.address),
       threshold: session.threshold
     });
+    return this.finalizeDeployment(sessionId, deployment.safeAddress, deployment.transactionHash);
+  }
+
+  // Records an already-deployed Safe against the group and closes the session.
+  // Used by the bot-key deploy() above and by the deploy-from-wallet flow, which
+  // verifies the on-chain deployment before calling this.
+  async finalizeDeployment(sessionId: string, safeAddress: Address, transactionHash: Hex): Promise<SafeGroupDeployment> {
+    const session = await this.getCollectingSession(sessionId);
+    if (session.threshold > session.owners.length) {
+      throw new UserInputError("Not enough joined owners for the requested threshold", {
+        threshold: session.threshold,
+        owners: session.owners.length
+      });
+    }
+    const ownerAddresses = session.owners.map((owner) => owner.address);
     const wallet: GroupWallet = {
       chatId: session.chatId,
-      safeAddress: deployment.safeAddress,
+      safeAddress,
       threshold: session.threshold,
       owners: ownerAddresses,
       createdAt: new Date()
@@ -103,12 +117,16 @@ export class SafeGroupSetupService {
     const updated: SafeCreationSession = {
       ...session,
       status: "deployed",
-      deployedSafeAddress: deployment.safeAddress,
-      deploymentTxHash: deployment.transactionHash
+      deployedSafeAddress: safeAddress,
+      deploymentTxHash: transactionHash
     };
     await this.repository.saveGroupWallet(wallet);
     await this.repository.saveSafeCreationSession(updated);
-    return { session: updated, wallet, deployment };
+    return {
+      session: updated,
+      wallet,
+      deployment: { safeAddress, transactionHash, threshold: session.threshold, owners: ownerAddresses }
+    };
   }
 
   async cancelSession(sessionId: string): Promise<SafeCreationSession> {

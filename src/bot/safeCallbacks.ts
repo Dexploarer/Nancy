@@ -1,8 +1,8 @@
 import type { Bot, Context } from "grammy";
 import { AppError, UserInputError } from "../domain/errors.js";
 import { Logger } from "../logger.js";
-import { formatGeneratedWallet, formatSafeCreationSession, formatSafeDeployment, formatWallet } from "./formatters.js";
-import { safeGroupKeyboard } from "./keyboards.js";
+import { formatGeneratedWallet, formatSafeCreationSession } from "./formatters.js";
+import { deployPageKeyboard, safeGroupKeyboard } from "./keyboards.js";
 import { requireChatId, requireGroupAdmin, requireTelegramUserId } from "./commandUtils.js";
 import type { BotDependencies } from "./bot.js";
 
@@ -45,10 +45,11 @@ export function registerSafeCallbacks(bot: Bot, dependencies: BotDependencies): 
     await handleCallback(ctx, async () => {
       const chatId = requireChatId(ctx.chat?.id);
       await requireGroupAdmin(ctx, chatId);
-      const result = await dependencies.safeGroupSetupService.deploy(ctx.callbackQuery.data.slice("safe_deploy:".length));
-      await ctx.answerCallbackQuery({ text: "Safe deployed" });
-      await ctx.editMessageText(
-        [formatSafeCreationSession(result.session), "", formatSafeDeployment(result.deployment), "", formatWallet(result.wallet)].join("\n")
+      const sessionId = ctx.callbackQuery.data.slice("safe_deploy:".length);
+      await ctx.answerCallbackQuery();
+      await ctx.reply(
+        "Deploy the Safe from your own wallet — you pay the gas, the bot holds no key. Tap below.",
+        { reply_markup: deployPageKeyboard(sessionId, dependencies.config.publicBaseUrl, ctx.chat?.type === "private") }
       );
     });
   });
