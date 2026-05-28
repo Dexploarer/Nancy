@@ -1,7 +1,8 @@
 import type { WalletLink } from "../domain/types.js";
 import { buildWalletLinkMessage } from "../services/walletLinkService.js";
+import { walletProviderScript } from "./walletProviderScript.js";
 
-export function renderLinkPage(link: WalletLink): string {
+export function renderLinkPage(link: WalletLink, walletConnectProjectId?: string): string {
   const nonceJson = JSON.stringify(link.nonce);
   const addressJson = JSON.stringify(link.address);
   const messageJson = JSON.stringify(buildWalletLinkMessage(link));
@@ -33,7 +34,8 @@ export function renderLinkPage(link: WalletLink): string {
     <button id="link" ${alreadyLinked ? "disabled" : ""}>Connect wallet and sign</button>
     <output id="output">${alreadyLinked ? "This wallet is already linked." : "Waiting for signature."}</output>
   </main>
-  <script>
+  <script type="module">
+    ${walletProviderScript(walletConnectProjectId)}
     const nonce = ${nonceJson};
     const expectedAddress = ${addressJson};
     const message = ${messageJson};
@@ -44,20 +46,17 @@ export function renderLinkPage(link: WalletLink): string {
       telegramWebApp.ready();
     }
     button.addEventListener("click", async () => {
-      if (!window.ethereum) {
-        output.textContent = "No injected wallet found. Open this page in your wallet's in-app browser (MetaMask/Rabby/etc.).";
-        return;
-      }
       button.disabled = true;
       try {
-        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const provider = await getProvider();
+        const accounts = await provider.request({ method: "eth_requestAccounts" });
         const address = accounts[0];
         if (address.toLowerCase() !== expectedAddress.toLowerCase()) {
           output.textContent = "Connected wallet " + address + " does not match the wallet you are linking (" + expectedAddress + "). Switch accounts and try again.";
           button.disabled = false;
           return;
         }
-        const signature = await window.ethereum.request({
+        const signature = await provider.request({
           method: "personal_sign",
           params: [message, address]
         });

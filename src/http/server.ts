@@ -36,7 +36,7 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
       return route(async () => renderSafeSigningPage(appState, url.pathname));
     }
     if (request.method === "GET" && url.pathname.startsWith("/link/")) {
-      return route(async () => renderWalletLinkPage(appState, url.pathname));
+      return route(async () => renderWalletLinkPage(appState, url.pathname, config.walletConnectProjectId));
     }
     if (request.method === "GET" && url.pathname.startsWith("/pool/")) {
       return route(async () => renderPoolAnalyticsPage(url.pathname));
@@ -90,10 +90,10 @@ async function renderSafeSigningPage(appState: App, pathname: string): Promise<R
   });
 }
 
-async function renderWalletLinkPage(appState: App, pathname: string): Promise<Response> {
+async function renderWalletLinkPage(appState: App, pathname: string, walletConnectProjectId?: string): Promise<Response> {
   const nonce = requiredPathSuffix(pathname, "/link/");
   const link = await appState.walletLinkService.getPendingLinkByNonce(nonce);
-  return new Response(renderLinkPage(link), {
+  return new Response(renderLinkPage(link, walletConnectProjectId), {
     headers: { "Content-Type": "text/html; charset=utf-8" }
   });
 }
