@@ -26,6 +26,7 @@ function smokeConfig(): AppConfig {
     dexDeadlineSeconds: 86400,
     httpPort: PORT,
     depositWatchEnabled: false,
+    platformAdminIds: [],
     riskCheckMode: "warn",
     minLiquidityUsd: 1000,
     maxBuyTaxBps: 1500,

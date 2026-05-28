@@ -18,6 +18,29 @@ import { createId } from "../utils/ids.js";
 import { calculateDepositShares, calculateWithdrawalQuote } from "./poolAccounting.js";
 import { buildPoolAnalytics, subtractReserved, sumReservedWithdrawals, sumShares } from "./poolAnalyticsBuilder.js";
 
+export type PortfolioEntry = {
+  chatId: ChatId;
+  role: PoolRole;
+  activeValueWei: bigint;
+  depositedWei: bigint;
+  unrealizedPnlWei: bigint;
+};
+
+export type Portfolio = {
+  entries: PortfolioEntry[];
+  totalActiveValueWei: bigint;
+  totalDepositedWei: bigint;
+  totalPnlWei: bigint;
+};
+
+export type PlatformStats = {
+  groups: number;
+  totalMembers: number;
+  totalTvlWei: bigint;
+  depositVolume24hWei: bigint;
+  withdrawalVolume24hWei: bigint;
+};
+
 export class PoolService {
   constructor(private readonly repository: Repository, private readonly poolRepository: PoolRepository, private readonly withdrawalFeeBps: number) {}
 
@@ -287,6 +310,62 @@ export class PoolService {
   async listQueuedWithdrawals(chatId: ChatId): Promise<PoolWithdrawalRequest[]> {
     const requests = await this.poolRepository.listPoolWithdrawalRequests(chatId);
     return requests.filter((request) => request.status === "queued");
+  }
+
+  // Cross-group portfolio: the caller's position in every pool they belong to.
+  async buildPortfolio(telegramUserId: string): Promise<Portfolio> {
+    const wallets = await this.repository.listGroupWallets();
+    const entries: PortfolioEntry[] = [];
+    for (const wallet of wallets) {
+      const member = await this.poolRepository.getPoolMember(wallet.chatId, telegramUserId);
+      if (member === null) {
+        continue;
+      }
+      const analytics = await this.getAnalytics(wallet.chatId, telegramUserId);
+      entries.push({
+        chatId: wallet.chatId,
+        role: analytics.member.role,
+        activeValueWei: analytics.member.activeValueWei,
+        depositedWei: analytics.member.depositedWei,
+        unrealizedPnlWei: analytics.member.unrealizedPnlWei
+      });
+    }
+    return {
+      entries,
+      totalActiveValueWei: entries.reduce((sum, entry) => sum + entry.activeValueWei, 0n),
+      totalDepositedWei: entries.reduce((sum, entry) => sum + entry.depositedWei, 0n),
+      totalPnlWei: entries.reduce((sum, entry) => sum + entry.unrealizedPnlWei, 0n)
+    };
+  }
+
+  // Platform-wide rollup for the bot operator.
+  async buildPlatformStats(): Promise<PlatformStats> {
+    const wallets = await this.repository.listGroupWallets();
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    let totalMembers = 0;
+    let totalTvlWei = 0n;
+    let depositVolume24hWei = 0n;
+    let withdrawalVolume24hWei = 0n;
+    for (const wallet of wallets) {
+      const members = await this.poolRepository.listPoolMembers(wallet.chatId);
+      totalMembers += members.length;
+      const snapshot = await this.poolRepository.getLatestPoolNavSnapshot(wallet.chatId);
+      if (snapshot !== null) {
+        totalTvlWei += snapshot.navWei;
+      }
+      const ledger = await this.poolRepository.listPoolLedgerEntries(wallet.chatId, 500);
+      for (const entry of ledger) {
+        if (entry.createdAt.getTime() < cutoff) {
+          continue;
+        }
+        if (entry.type === "deposit") {
+          depositVolume24hWei += entry.amountWei;
+        } else if (entry.type === "withdrawal-execution") {
+          withdrawalVolume24hWei += entry.amountWei;
+        }
+      }
+    }
+    return { groups: wallets.length, totalMembers, totalTvlWei, depositVolume24hWei, withdrawalVolume24hWei };
   }
 
   async getWithdrawalTransactions(chatId: ChatId, requestId: string, feeRecipient: Address): Promise<ChainTransaction[]> {

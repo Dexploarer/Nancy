@@ -29,6 +29,7 @@ export const BOT_COMMANDS = [
   { command: "pool_deposit", description: "Credit a verified BNB deposit" },
   { command: "pool_withdraw", description: "Request a pool withdrawal" },
   { command: "pool_cancel", description: "Cancel a queued pool withdrawal" },
+  { command: "portfolio", description: "Your position across all your groups" },
   { command: "buy", description: "Create a BSC token buy proposal" },
   { command: "proposal", description: "Show a trade proposal" },
   { command: "flap_metadata", description: "Upload optional Flap metadata" },

@@ -6,7 +6,7 @@ import { renderUsage } from "./commandUsage.js";
 import { requireChatId, requireGroupAdmin, requireTelegramUserId } from "./commandUtils.js";
 import { formatGeneratedWallet, formatWallet } from "./formatters.js";
 import { confirmUnlinkKeyboard, connectWalletKeyboard, promptStepKeyboard } from "./keyboards.js";
-import { formatMyStatus, formatPoolAnalytics } from "./poolCommands.js";
+import { formatMyStatus, formatPoolAnalytics, formatPortfolio } from "./poolCommands.js";
 import {
   getFlow,
   isComplete,
@@ -260,6 +260,10 @@ export async function handleMenuSelection(deps: BotDependencies, ctx: Context, c
     case "my_status": {
       const chatId = requireChatId(ctx.chat?.id);
       await ctx.reply(formatMyStatus(await deps.poolService.getAnalytics(chatId, requireTelegramUserId(ctx.from?.id))));
+      return;
+    }
+    case "portfolio": {
+      await ctx.reply(formatPortfolio(await deps.poolService.buildPortfolio(requireTelegramUserId(ctx.from?.id))));
       return;
     }
     case "safe_unlink": {

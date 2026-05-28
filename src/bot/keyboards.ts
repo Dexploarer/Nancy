@@ -13,6 +13,7 @@ export function mainMenuKeyboard(): InlineKeyboard {
     .text("Pool analytics", "menu:pool")
     .row()
     .text("My status", "menu:my_status")
+    .text("My portfolio", "menu:portfolio")
     .row()
     .text("Deposit", "menu:pool_deposit")
     .text("Withdraw", "menu:pool_withdraw")

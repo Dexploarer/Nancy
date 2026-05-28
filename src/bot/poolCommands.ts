@@ -5,7 +5,7 @@ import { InvalidInputError, UserInputError } from "../domain/errors.js";
 import type { PoolAnalytics, PoolRole, PoolWithdrawalRequest } from "../domain/types.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
 import { GroupWalletService } from "../services/groupWalletService.js";
-import { PoolService } from "../services/poolService.js";
+import { PoolService, type PlatformStats, type Portfolio } from "../services/poolService.js";
 import { WalletLinkService } from "../services/walletLinkService.js";
 import { formatBnb, parseAddress, parseBasisPoints, parseBnbAmount, parseNonNegativeBnbAmount, parseTransactionHash } from "../utils/evm.js";
 import { handleUserCommand, parsePositiveInteger, requireChatId, requireGroupAdmin, requiredPart, requireTelegramUserId, splitCommand } from "./commandUtils.js";
@@ -131,6 +131,23 @@ export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependen
       await ctx.reply(`Withdrawal ${request.id} cancelled. ${request.shares.toString()} shares were restored.`);
     });
   });
+
+  bot.command("portfolio", async (ctx) => {
+    await handleUserCommand(ctx, "portfolio", async () => {
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      await ctx.reply(formatPortfolio(await dependencies.poolService.buildPortfolio(fromId)));
+    });
+  });
+
+  bot.command("platform", async (ctx) => {
+    await handleUserCommand(ctx, "platform", async () => {
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      if (!dependencies.config.platformAdminIds.includes(fromId)) {
+        throw new UserInputError("This command is for platform admins only.");
+      }
+      await ctx.reply(formatPlatformStats(await dependencies.poolService.buildPlatformStats()));
+    });
+  });
 }
 
 async function getAllowedDepositSenders(dependencies: PoolCommandDependencies, telegramUserId: string): Promise<Address[]> {
@@ -186,6 +203,33 @@ export function formatMyStatus(analytics: PoolAnalytics): string {
     `Active value: ${formatBnb(analytics.member.activeValueWei)}`,
     `Queued withdrawals: ${formatBnb(analytics.member.queuedWithdrawalWei)}`,
     `PnL after fees: ${formatBnb(analytics.member.unrealizedPnlWei)}`
+  ].join("\n");
+}
+
+export function formatPortfolio(portfolio: Portfolio): string {
+  if (portfolio.entries.length === 0) {
+    return "You're not in any pools yet. Join a group Safe and deposit to start.";
+  }
+  return [
+    "💼 Your portfolio across all groups",
+    ...portfolio.entries.map(
+      (entry) => `• Group ${entry.chatId} — ${entry.role}: ${formatBnb(entry.activeValueWei)} (PnL ${formatBnb(entry.unrealizedPnlWei)})`
+    ),
+    "",
+    `Total value: ${formatBnb(portfolio.totalActiveValueWei)}`,
+    `Total deposited: ${formatBnb(portfolio.totalDepositedWei)}`,
+    `Total PnL: ${formatBnb(portfolio.totalPnlWei)}`
+  ].join("\n");
+}
+
+export function formatPlatformStats(stats: PlatformStats): string {
+  return [
+    "📊 Platform stats",
+    `Groups: ${stats.groups}`,
+    `Members: ${stats.totalMembers}`,
+    `Total TVL: ${formatBnb(stats.totalTvlWei)}`,
+    `24h deposits: ${formatBnb(stats.depositVolume24hWei)}`,
+    `24h withdrawals: ${formatBnb(stats.withdrawalVolume24hWei)}`
   ].join("\n");
 }
 
