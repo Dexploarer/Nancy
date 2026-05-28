@@ -1,4 +1,4 @@
-# The Family Bot
+# NANCY
 
 Nancy, the Golden Girl of Binance: a Telegram MVP for BSC group trading wallets and Flap token launches.
 
