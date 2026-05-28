@@ -61,10 +61,25 @@ export function confirmUnlinkKeyboard(): InlineKeyboard {
   return new InlineKeyboard().text("Confirm unlink", "safe_unlink_confirm");
 }
 
-export function safeSubmissionKeyboard(submissionId: string, publicBaseUrl?: string): InlineKeyboard {
-  const base = publicBaseUrl?.replace(/\/$/, "") ?? "http://localhost:3000";
-  const url = `${base}/sign/${encodeURIComponent(submissionId)}`;
-  return new InlineKeyboard().url("Open signing page", url);
+function baseUrl(publicBaseUrl?: string): string {
+  return publicBaseUrl?.replace(/\/$/, "") ?? "http://localhost:3000";
+}
+
+// WebApp buttons open inside Telegram (and auto-fill identity via initData) but
+// are only allowed in private chats; in groups we fall back to a URL button.
+// The /link/<nonce> and /sign/<id> pages carry their own context, so a URL
+// button works everywhere.
+function pageOpenButton(label: string, url: string, preferWebApp: boolean): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  return preferWebApp ? keyboard.webApp(label, url) : keyboard.url(label, url);
+}
+
+export function linkPageKeyboard(nonce: string, publicBaseUrl: string | undefined, preferWebApp: boolean): InlineKeyboard {
+  return pageOpenButton("Connect & link wallet", `${baseUrl(publicBaseUrl)}/link/${encodeURIComponent(nonce)}`, preferWebApp);
+}
+
+export function safeSubmissionKeyboard(submissionId: string, publicBaseUrl: string | undefined, preferWebApp: boolean): InlineKeyboard {
+  return pageOpenButton("Open & sign", `${baseUrl(publicBaseUrl)}/sign/${encodeURIComponent(submissionId)}`, preferWebApp);
 }
 
 export function poolAppKeyboard(chatId: string, publicBaseUrl?: string): InlineKeyboard {

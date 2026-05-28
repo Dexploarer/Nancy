@@ -20,18 +20,20 @@ import { MemoryRepository } from "../src/storage/memoryRepository.js";
 const CHAT = "555";
 const USER = "111";
 
-function fakeContext(text: string): { ctx: Context; replies: string[] } {
+function fakeContext(text: string): { ctx: Context; replies: string[]; markups: unknown[] } {
   const replies: string[] = [];
+  const markups: unknown[] = [];
   const ctx = {
     message: { text },
     chat: { id: 555, type: "group" },
     from: { id: 111 },
-    reply: async (value: string) => {
+    reply: async (value: string, other?: { reply_markup?: unknown }) => {
       replies.push(value);
+      markups.push(other?.reply_markup);
     },
     answerCallbackQuery: async () => {}
   } as unknown as Context;
-  return { ctx, replies };
+  return { ctx, replies, markups };
 }
 
 describe("prompt state helpers", () => {
@@ -101,11 +103,13 @@ describe("routePromptInput", () => {
       config: { publicBaseUrl: "https://nancy.example" }
     } as unknown as BotDependencies;
 
-    const { ctx, replies } = fakeContext("0x1111111111111111111111111111111111111111");
+    const { ctx, replies, markups } = fakeContext("0x1111111111111111111111111111111111111111");
     const handled = await routePromptInput(deps, ctx);
 
     expect(handled).toBe(true);
-    expect(replies[0]).toContain("https://nancy.example/link/");
+    expect(replies[0]).toContain("connect this wallet");
+    // the link URL is now a tappable button, not pasted text
+    expect(JSON.stringify(markups[0])).toContain("https://nancy.example/link/");
     // the flow began a pending wallet link for that exact address
     const link = await repository.getWalletLink(USER, "0x1111111111111111111111111111111111111111");
     expect(link?.status).toBe("pending");

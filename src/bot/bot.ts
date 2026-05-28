@@ -25,7 +25,7 @@ import { SafeDeploymentService } from "../services/safeDeploymentService.js";
 import { SafeGroupSetupService } from "../services/safeGroupSetupService.js";
 import { PoolService } from "../services/poolService.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
-import { helpText, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
+import { helpText, linkPageKeyboard, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
 import { registerSafeCallbacks } from "./safeCallbacks.js";
 import { registerPoolCommands } from "./poolCommands.js";
 import { beginUnlink, handleMenuSelection, handlePromptBack, handlePromptCancel, routePromptInput } from "./promptController.js";
@@ -88,16 +88,14 @@ export function createBot(dependencies: BotDependencies): Bot {
       const parts = splitCommand(ctx.message?.text, 2);
       const address = parseAddress(requiredPart(parts, 1));
       const result = await dependencies.walletLinkService.beginLink(fromId, address);
-      const base = dependencies.config.publicBaseUrl?.replace(/\/$/, "") ?? "http://localhost:3000";
-      const linkUrl = `${base}/link/${encodeURIComponent(result.link.nonce)}`;
       await ctx.reply(
         [
-          "One click: open the link below, connect this wallet, and sign.",
-          linkUrl,
+          "Tap below, connect this wallet, and sign.",
           "",
           "Manual fallback: sign this message and run /link_submit <ownerAddress> <signature>",
           result.message
-        ].join("\n")
+        ].join("\n"),
+        { reply_markup: linkPageKeyboard(result.link.nonce, dependencies.config.publicBaseUrl, ctx.chat?.type === "private") }
       );
     });
   });
@@ -298,8 +296,8 @@ export function createBot(dependencies: BotDependencies): Bot {
       if (submission === null) {
         throw new InvalidInputError("The source must be trade, flap, or withdrawal.");
       }
-      await ctx.reply(formatSafeSubmission(submission, dependencies.config.publicBaseUrl), {
-        reply_markup: safeSubmissionKeyboard(submission.id, dependencies.config.publicBaseUrl)
+      await ctx.reply(formatSafeSubmission(submission), {
+        reply_markup: safeSubmissionKeyboard(submission.id, dependencies.config.publicBaseUrl, ctx.chat?.type === "private")
       });
     });
   });
@@ -312,8 +310,8 @@ export function createBot(dependencies: BotDependencies): Bot {
       const ownerAddress = parseAddress(requiredPart(parts, 2));
       const signature = parseHex(requiredPart(parts, 3), "signature");
       const submission = await dependencies.safeSubmissionService.submitOwnerSignature(submissionId, ownerAddress, signature, fromId);
-      await ctx.reply(formatSafeSubmission(submission, dependencies.config.publicBaseUrl), {
-        reply_markup: safeSubmissionKeyboard(submission.id, dependencies.config.publicBaseUrl)
+      await ctx.reply(formatSafeSubmission(submission), {
+        reply_markup: safeSubmissionKeyboard(submission.id, dependencies.config.publicBaseUrl, ctx.chat?.type === "private")
       });
     });
   });

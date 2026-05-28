@@ -84,9 +84,7 @@ export function formatSafeCreationSession(session: SafeCreationSession): string 
     .join("\n");
 }
 
-export function formatSafeSubmission(submission: SafeSubmission, publicBaseUrl?: string): string {
-  const signingUrl =
-    publicBaseUrl === undefined ? `/sign/${submission.id}` : `${publicBaseUrl.replace(/\/$/, "")}/sign/${submission.id}`;
+export function formatSafeSubmission(submission: SafeSubmission): string {
   return [
     `Safe submission ${submission.id}`,
     `Source: ${submission.sourceType} ${submission.sourceId}`,
@@ -96,8 +94,8 @@ export function formatSafeSubmission(submission: SafeSubmission, publicBaseUrl?:
     `Nonce: ${submission.safeTransaction.nonce.toString()}`,
     `Service: ${submission.transactionServiceUrl}`,
     "Owner flow:",
-    `1. Open ${signingUrl}, connect your linked owner wallet, and sign.`,
-    `2. The first valid owner signature proposes the transaction; later signatures confirm it.`
+    "1. Tap Open & sign, connect your linked owner wallet, and sign.",
+    "2. The first valid owner signature proposes the transaction; later signatures confirm it."
   ].join("\n");
 }
 

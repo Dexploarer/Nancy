@@ -13,7 +13,7 @@ import { parsePositiveInteger } from "./commandUtils.js";
 import { createFlapSalt, parseVaultRecipients } from "../chain/flapService.js";
 import { formatFlapLaunch, formatSafeCreationSession, formatSafeStatus, formatSafeSubmission, formatTradeProposal } from "./formatters.js";
 import { formatPoolAnalytics, formatWithdrawalRequest } from "./poolCommands.js";
-import { safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
+import { linkPageKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
 import type { BotDependencies } from "./bot.js";
 
 export type PromptReply = (text: string, keyboard?: InlineKeyboard) => Promise<void>;
@@ -109,15 +109,9 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
     execute: async (c, values) => {
       const address = parseAddress(required(values, 0));
       const result = await c.deps.walletLinkService.beginLink(c.telegramUserId, address);
-      const base = c.deps.config.publicBaseUrl?.replace(/\/$/, "") ?? "http://localhost:3000";
       await c.reply(
-        [
-          "One click: open the link below, connect this wallet, and sign.",
-          `${base}/link/${encodeURIComponent(result.link.nonce)}`,
-          "",
-          "Manual fallback: /link_submit <ownerAddress> <signature>",
-          result.message
-        ].join("\n")
+        ["Tap below, connect this wallet, and sign.", "", "Manual fallback: /link_submit <ownerAddress> <signature>", result.message].join("\n"),
+        linkPageKeyboard(result.link.nonce, c.deps.config.publicBaseUrl, false)
       );
     }
   },
@@ -298,7 +292,7 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
           : source === "flap"
             ? await c.deps.safeSubmissionService.prepareFlapLaunchSubmission(c.chatId, sourceId)
             : await c.deps.safeSubmissionService.prepareWithdrawalSubmission(c.chatId, sourceId);
-      await c.reply(formatSafeSubmission(submission, c.deps.config.publicBaseUrl), safeSubmissionKeyboard(submission.id, c.deps.config.publicBaseUrl));
+      await c.reply(formatSafeSubmission(submission), safeSubmissionKeyboard(submission.id, c.deps.config.publicBaseUrl, false));
     }
   },
   safe_status: {
