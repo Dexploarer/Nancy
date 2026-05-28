@@ -16,6 +16,7 @@ import {
   BOT_SHORT_DESCRIPTION
 } from "../bot/telegramCommands.js";
 import { parseAddress } from "../utils/evm.js";
+import { buildPgPoolConfig } from "../storage/pgPoolConfig.js";
 import { assertHttpOk } from "./httpChecks.js";
 
 const BSC_USDT: Address = "0x55d398326f99059fF775485246999027B3197955";
@@ -175,7 +176,7 @@ async function checkPostgres(input: AppConfig): Promise<void> {
   if (input.databaseUrl === undefined) {
     throw new AppError("DATABASE_URL is required for Postgres smoke");
   }
-  const pool = new Pool({ connectionString: input.databaseUrl });
+  const pool = new Pool(buildPgPoolConfig(input.databaseUrl));
   await pool.query("select 1");
   await pool.end();
   pass("Postgres", "select 1");
