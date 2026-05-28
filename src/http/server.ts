@@ -9,6 +9,7 @@ import { renderSigningPage } from "./signingPage.js";
 import { renderLinkPage, renderLinkStartPage } from "./linkPage.js";
 import { renderDeployPage } from "./deployPage.js";
 import { saltNonceForSession } from "../services/safeDeploymentService.js";
+import { notifyGroup } from "../services/notify.js";
 import { renderPoolPage } from "./poolPage.js";
 import { verifyTelegramInitData } from "./telegramInitData.js";
 import { serializePoolAnalytics } from "./poolAnalyticsResponse.js";
@@ -184,6 +185,7 @@ async function submitSafeDeployment(appState: App, _config: AppConfig, request: 
     transactionHash
   );
   const result = await appState.safeGroupSetupService.finalizeDeployment(sessionId, safeAddress, transactionHash);
+  await notifyGroup(appState.bot, result.wallet.chatId, `✅ Group Safe deployed and linked: ${result.wallet.safeAddress}`);
   return Response.json({ safeAddress: result.wallet.safeAddress });
 }
 
@@ -210,6 +212,7 @@ async function submitSafeSignature(appState: App, config: AppConfig, request: Re
     parseHex(payload.signature, "signature"),
     resolveTelegramUserId(payload, config.telegramBotToken)
   );
+  await notifyGroup(appState.bot, submission.chatId, `🖊️ An owner just signed Safe tx ${submission.id}. Status: ${submission.status}.`);
   return Response.json({
     id: submission.id,
     status: submission.status,
