@@ -25,7 +25,6 @@ import { SafeDeploymentService } from "../services/safeDeploymentService.js";
 import { SafeGroupSetupService } from "../services/safeGroupSetupService.js";
 import { PoolService } from "../services/poolService.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
-import { BOT_COMMANDS } from "./telegramCommands.js";
 import { helpText, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
 import { registerSafeCallbacks } from "./safeCallbacks.js";
 import { registerPoolCommands } from "./poolCommands.js";
@@ -63,9 +62,7 @@ export function createBot(dependencies: BotDependencies): Bot {
     await ctx.reply(
       [
         "The Family group trading bot",
-        "Use the buttons for common flows or Telegram's command menu for every command.",
-        "",
-        BOT_COMMANDS.map((command) => `/${command.command} - ${command.description}`).join("\n")
+        "Tap a button below for common flows, or open the command menu (the / icon) for the full list."
       ].join("\n"),
       { reply_markup: mainMenuKeyboard() }
     );
