@@ -42,6 +42,7 @@ export function renderDeployPage(input: {
     <p>Threshold: ${input.threshold} of ${input.owners.length}</p>
     <p>Owners:<br/>${ownersList}</p>
     <p>Connect a wallet to deploy the Safe on BNB Smart Chain. You pay the gas; the bot never holds a key.</p>
+    <p><strong>Make sure your wallet is on BNB Smart Chain</strong> before deploying.</p>
     <button id="deploy">Connect wallet and deploy</button>
     <output id="output">Waiting for your wallet.</output>
   </main>

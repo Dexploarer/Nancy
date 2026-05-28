@@ -99,6 +99,13 @@ export class SafeDeploymentService {
     transactionHash: Hex
   ): Promise<{ safeAddress: Address }> {
     const expected = this.buildDeploymentTransaction(owners, threshold, saltNonce);
+    // The page posts the hash the instant the wallet returns it — before BSC mines
+    // the block — so poll for the receipt instead of single-shot reads that would
+    // throw on a perfectly good deploy.
+    const receipt = await this.publicClient.waitForTransactionReceipt({ hash: transactionHash, timeout: 60_000 });
+    if (receipt.status !== "success") {
+      throw new UserInputError("Deployment transaction failed on-chain");
+    }
     const transaction = await this.publicClient.getTransaction({ hash: transactionHash });
     assertDeploymentMatches({
       actualTo: transaction.to,
@@ -106,10 +113,6 @@ export class SafeDeploymentService {
       expectedTo: expected.to,
       expectedData: expected.data
     });
-    const receipt = await this.publicClient.getTransactionReceipt({ hash: transactionHash });
-    if (receipt.status !== "success") {
-      throw new UserInputError("Deployment transaction has not succeeded yet");
-    }
     const events = parseEventLogs({ abi: safeProxyFactoryAbi, eventName: "ProxyCreation", logs: receipt.logs });
     const event = events.find((item) => item.address.toLowerCase() === this.addresses.safeProxyFactory.toLowerCase());
     if (event === undefined) {
