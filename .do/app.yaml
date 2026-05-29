@@ -1,0 +1,43 @@
+# DigitalOcean App Platform spec for Nancy.
+# Deploy with: doctl apps create --spec .do/app.yaml  (after connecting GitHub to DO).
+# Builds from the Dockerfile and runs ONE long-running instance (HTTP server +
+# deposit watcher + webhook). Do NOT raise instance_count — the in-process pool
+# mutex serializes money mutations in a single process.
+name: nancy
+region: sfo
+services:
+  - name: bot
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    dockerfile_path: Dockerfile
+    source_dir: /
+    github:
+      repo: Dexploarer/Nancy
+      branch: lazy-ux-phase1
+      deploy_on_push: true
+    http_port: 8080
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 20
+      period_seconds: 30
+    envs:
+      - key: HTTP_PORT
+        scope: RUN_AND_BUILD_TIME
+        value: "8080"
+      - key: APP_ENV
+        value: production
+      - key: STORAGE_DRIVER
+        value: postgres
+      # Auto-filled with the app's own https URL, so the bot registers its Telegram
+      # webhook against the right host and serves the link/deploy/execute/pool pages.
+      - key: PUBLIC_BASE_URL
+        value: ${APP_URL}
+      # All remaining vars are set in the App Platform dashboard (bulk-paste from .env),
+      # with these marked as SECRET:
+      #   TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, DATABASE_URL, SAFE_API_KEY,
+      #   SAFE_EXECUTOR_PRIVATE_KEY, PINATA_JWT
+      # and these as plain config:
+      #   BSC_CHAIN_ID, BSC_RPC_URL, SAFE_TRANSACTION_SERVICE_URL, WALLETCONNECT_PROJECT_ID,
+      #   PLATFORM_FEE_RECIPIENT, PLATFORM_COMMISSION_RECEIVER, PLATFORM_ADMIN_IDS,
+      #   TRADE_FEE_BPS, POOL_WITHDRAWAL_FEE_BPS, DEX_DEADLINE_SECONDS, DEPOSIT_WATCH,
+      #   MAX_BUY_TAX_BPS, MAX_SELL_TAX_BPS, MIN_LIQUIDITY_USD, RISK_CHECK_MODE
