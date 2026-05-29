@@ -1,13 +1,13 @@
 # NANCY
 
-Nancy, the Golden Girl of Binance: a Telegram MVP for BSC group trading wallets and Flap token launches.
+Nancy, the Golden Girl of Binance — a production Telegram bot for BSC group trading wallets and Flap token launches.
 
-## MVP surface
+## Capabilities
 
 - Link one Safe-style group wallet per Telegram group.
 - Generate non-custodial owner wallets (key shown once by DM, never stored) or link external Safe owner wallets with signed nonces.
 - Restrict group wallet setup, Flap metadata, Flap launches, and execution to Telegram group admins.
-- Collect linked owner wallets from Telegram group members with inline buttons, then deploy a BSC Safe when `SAFE_EXECUTOR_PRIVATE_KEY` is configured.
+- Collect linked owner wallets from Telegram group members with inline buttons, then deploy a BSC Safe from an owner's own wallet — the bot holds no key.
 - Create group trade proposals for Flap bonding-curve tokens.
 - Route migrated Flap tokens and regular BSC tokens through PancakeSwap V2.
 - Run token risk checks before buy proposals.
@@ -20,7 +20,7 @@ Nancy, the Golden Girl of Binance: a Telegram MVP for BSC group trading wallets 
 - Route Flap launch commission to the configured platform wallet through Flap's existing `commissionReceiver`.
 - Prepare Safe transactions, collect owner signatures, and submit proposals/confirmations to Safe Transaction Service.
 
-This MVP does not deploy a custom vault contract. Custody remains in the group Safe, while the bot stores the accounting ledger and prepares Safe transactions.
+Nancy does not deploy a custom vault contract. Custody remains in the group Safe; the bot stores the accounting ledger and prepares Safe transactions.
 
 ## Setup
 
