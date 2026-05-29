@@ -64,7 +64,10 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
       return Response.json({ ok: true });
     }
     if (url.pathname.startsWith("/api/")) {
-      const allowed = globalApiLimiter.allow("*") && perClientApiLimiter.allow(clientKeyFromHeaders(request.headers));
+      // Per-client first so one throttled client short-circuits before touching the
+      // global counter — otherwise a single noisy IP drains the global budget and
+      // 429s everyone. A key-rotating spoofer still hits the global backstop.
+      const allowed = perClientApiLimiter.allow(clientKeyFromHeaders(request.headers)) && globalApiLimiter.allow("*");
       if (!allowed) {
         return Response.json({ error: "Too many requests" }, { status: 429 });
       }
