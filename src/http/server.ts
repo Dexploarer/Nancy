@@ -165,6 +165,20 @@ export async function startHttpRuntime(appState: App, config: AppConfig): Promis
   await configureTelegramBot(appState.bot);
   Logger.info("[HttpRuntime] Telegram commands configured");
 
+  // Persistent Mini App launcher: the bot DM's menu button opens Nancy's web app.
+  // (Per-group pool analytics still open from the group's "Pool analytics" button,
+  // which carries the chat id; the menu button has no group context.)
+  if (config.publicBaseUrl?.startsWith("https://")) {
+    try {
+      await appState.bot.api.setChatMenuButton({
+        menu_button: { type: "web_app", text: "Open Nancy", web_app: { url: config.publicBaseUrl } }
+      });
+      Logger.info("[HttpRuntime] Chat menu button set to Mini App", { url: config.publicBaseUrl });
+    } catch (error) {
+      Logger.warn("[HttpRuntime] setChatMenuButton skipped", { err: error instanceof Error ? error : undefined });
+    }
+  }
+
   Bun.serve({
     port: config.httpPort,
     fetch: createFetchHandler(appState, config)

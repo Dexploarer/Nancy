@@ -31,7 +31,11 @@ export function renderLandingPage(botUsername = "nancy_bsc_bot"): string {
       --gold-grad: linear-gradient(135deg, var(--g1) 0%, var(--g2) 38%, var(--g3) 70%, var(--g1) 100%);
     }
     * { box-sizing: border-box; margin: 0; }
-    html { scroll-behavior: smooth; }
+    /* Lenis: never let native smooth-scroll fight the JS scroll (that's the jank). */
+    html.lenis, html.lenis body { height: auto; }
+    .lenis.lenis-smooth { scroll-behavior: auto !important; }
+    .lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+    .lenis.lenis-stopped { overflow: hidden; }
     body {
       background: var(--ink);
       color: var(--text);
@@ -205,19 +209,29 @@ export function renderLandingPage(botUsername = "nancy_bsc_bot"): string {
     if (!reduce) {
       try {
         const { default: Lenis } = await import("https://esm.sh/lenis@1.1.18");
-        const lenis = new Lenis({ duration: 1.15, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), smoothWheel: true });
+        const lenis = new Lenis({ lerp: 0.1, smoothWheel: true, wheelMultiplier: 1, touchMultiplier: 1.4 });
         const raf = (time) => { lenis.raf(time); requestAnimationFrame(raf); };
         requestAnimationFrame(raf);
       } catch (e) { /* native scroll fallback */ }
     }
 
-    // Gold-dust canvas: slow rising motes with a soft twinkle.
+    // Gold-dust canvas: rising motes with a soft twinkle. The mote is pre-rendered
+    // ONCE to an offscreen sprite and drawImage'd — far cheaper than a per-frame
+    // radial gradient, so it never starves the scroll's frame budget.
     if (!reduce) {
       const canvas = document.getElementById("dust");
       const ctx = canvas.getContext("2d");
       let w, h, dpr, motes;
-      const COUNT = 90;
+      const COUNT = 80;
       const rand = (a, b) => a + Math.random() * (b - a);
+      const sprite = document.createElement("canvas");
+      sprite.width = sprite.height = 32;
+      const sctx = sprite.getContext("2d");
+      const sg = sctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+      sg.addColorStop(0, "rgba(245,231,172,1)");
+      sg.addColorStop(0.45, "rgba(233,196,106,0.55)");
+      sg.addColorStop(1, "rgba(233,196,106,0)");
+      sctx.fillStyle = sg; sctx.fillRect(0, 0, 32, 32);
       function resize() {
         dpr = Math.min(2, window.devicePixelRatio || 1);
         w = canvas.width = innerWidth * dpr; h = canvas.height = innerHeight * dpr;
@@ -225,8 +239,8 @@ export function renderLandingPage(botUsername = "nancy_bsc_bot"): string {
       }
       function seed() {
         motes = Array.from({ length: COUNT }, () => ({
-          x: rand(0, w), y: rand(0, h), r: rand(0.4, 1.8) * dpr,
-          vy: rand(0.06, 0.34) * dpr, vx: rand(-0.12, 0.12) * dpr,
+          x: rand(0, w), y: rand(0, h), r: rand(1.4, 5.5) * dpr,
+          vy: rand(0.06, 0.34) * dpr, vx: rand(-0.1, 0.1) * dpr,
           a: rand(0.15, 0.7), tw: rand(0.004, 0.014), p: rand(0, Math.PI * 2)
         }));
       }
@@ -234,14 +248,12 @@ export function renderLandingPage(botUsername = "nancy_bsc_bot"): string {
         ctx.clearRect(0, 0, w, h);
         for (const m of motes) {
           m.y -= m.vy; m.x += m.vx; m.p += m.tw;
-          if (m.y < -6) { m.y = h + 6; m.x = rand(0, w); }
-          if (m.x < -6) m.x = w + 6; if (m.x > w + 6) m.x = -6;
-          const alpha = m.a * (0.55 + 0.45 * Math.sin(m.p));
-          const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 3);
-          g.addColorStop(0, "rgba(245,231,172," + alpha + ")");
-          g.addColorStop(1, "rgba(233,196,106,0)");
-          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 3, 0, Math.PI * 2); ctx.fill();
+          if (m.y < -8) { m.y = h + 8; m.x = rand(0, w); }
+          if (m.x < -8) m.x = w + 8; if (m.x > w + 8) m.x = -8;
+          ctx.globalAlpha = m.a * (0.5 + 0.5 * Math.sin(m.p));
+          ctx.drawImage(sprite, m.x - m.r, m.y - m.r, m.r * 2, m.r * 2);
         }
+        ctx.globalAlpha = 1;
         requestAnimationFrame(frame);
       }
       resize(); seed(); frame();
