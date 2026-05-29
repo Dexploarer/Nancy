@@ -136,9 +136,11 @@ const CONTENT_SECURITY_POLICY = [
   "base-uri 'none'",
   "object-src 'none'",
   "img-src 'self' data:",
-  "style-src 'self' 'unsafe-inline'",
-  // Pages use inline bootstrap scripts and load the Telegram + WalletConnect SDKs
-  // from these CDNs; viem/WalletConnect may use eval/wasm, hence 'unsafe-eval'.
+  // Google Fonts (landing page: Cormorant Garamond + Manrope).
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  // Pages use inline bootstrap scripts and load the Telegram + WalletConnect + Lenis
+  // SDKs from these CDNs; viem/WalletConnect may use eval/wasm, hence 'unsafe-eval'.
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org https://esm.sh",
   // Same-origin analytics fetch, JSON-RPC over https, WalletConnect relay over wss.
   "connect-src 'self' https: wss:",
