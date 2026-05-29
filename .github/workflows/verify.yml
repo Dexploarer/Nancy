@@ -1,10 +1,9 @@
 name: verify
 
-# Runs the standard gate (typecheck + tests + static acceptance) on every push and PR
-# so regressions and dependency issues are caught before they reach main.
+# Runs the standard gate (typecheck + tests + static acceptance) on PRs.
+# Pushes to main are gated by deploy.yml (which verifies before shipping), so this
+# stays PR-only to avoid double-running the gate on every main push.
 on:
-  push:
-    branches: [main]
   pull_request:
 
 # Least privilege: the job only needs to read the repo.

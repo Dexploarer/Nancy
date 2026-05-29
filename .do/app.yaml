@@ -13,7 +13,7 @@ services:
     source_dir: /
     github:
       repo: Dexploarer/Nancy
-      branch: lazy-ux-phase1
+      branch: main
       deploy_on_push: true
     http_port: 8080
     health_check:

@@ -9,7 +9,7 @@ name: deploy
 #   (GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret)
 on:
   push:
-    branches: [lazy-ux-phase1]
+    branches: [main]
 
 permissions:
   contents: read
