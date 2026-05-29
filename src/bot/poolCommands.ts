@@ -135,6 +135,10 @@ export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependen
   bot.command("portfolio", async (ctx) => {
     await handleUserCommand(ctx, "portfolio", async () => {
       const fromId = requireTelegramUserId(ctx.from?.id);
+      if (ctx.chat?.type !== "private") {
+        await ctx.reply("🔒 Your portfolio is private — DM me and run /portfolio there.");
+        return;
+      }
       await ctx.reply(formatPortfolio(await dependencies.poolService.buildPortfolio(fromId)));
     });
   });
@@ -142,6 +146,10 @@ export function registerPoolCommands(bot: Bot, dependencies: PoolCommandDependen
   bot.command("platform", async (ctx) => {
     await handleUserCommand(ctx, "platform", async () => {
       const fromId = requireTelegramUserId(ctx.from?.id);
+      if (ctx.chat?.type !== "private") {
+        await ctx.reply("🔒 Platform stats are private — DM me and run /platform there.");
+        return;
+      }
       if (!dependencies.config.platformAdminIds.includes(fromId)) {
         throw new UserInputError("This command is for platform admins only.");
       }

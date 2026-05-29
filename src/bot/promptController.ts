@@ -206,6 +206,16 @@ export async function beginUnlink(deps: BotDependencies, ctx: Context): Promise<
   );
 }
 
+// Delivers personal data to the user's DM instead of posting it in the group.
+async function sendPrivately(ctx: Context, telegramUserId: string, text: string, label: string): Promise<void> {
+  try {
+    await ctx.api.sendMessage(Number(telegramUserId), text);
+    await ctx.reply(`📩 Sent your ${label} to our DM.`);
+  } catch {
+    await ctx.reply(`Start a DM with me first (open a chat with me and tap Start), then try ${label} again.`);
+  }
+}
+
 async function beginLinkWallet(deps: BotDependencies, ctx: Context): Promise<void> {
   // In a DM we can identify the user from initData, so offer the zero-typing
   // connect-first flow. In a group there is no initData, so fall back to the
@@ -258,12 +268,24 @@ export async function handleMenuSelection(deps: BotDependencies, ctx: Context, c
       return;
     }
     case "my_status": {
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      if (ctx.chat?.type === "private") {
+        await ctx.reply("My status is per-group — tap it inside a group, or use My portfolio for your overall position.");
+        return;
+      }
       const chatId = requireChatId(ctx.chat?.id);
-      await ctx.reply(formatMyStatus(await deps.poolService.getAnalytics(chatId, requireTelegramUserId(ctx.from?.id))));
+      const text = formatMyStatus(await deps.poolService.getAnalytics(chatId, fromId));
+      await sendPrivately(ctx, fromId, text, "status");
       return;
     }
     case "portfolio": {
-      await ctx.reply(formatPortfolio(await deps.poolService.buildPortfolio(requireTelegramUserId(ctx.from?.id))));
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const text = formatPortfolio(await deps.poolService.buildPortfolio(fromId));
+      if (ctx.chat?.type === "private") {
+        await ctx.reply(text);
+        return;
+      }
+      await sendPrivately(ctx, fromId, text, "portfolio");
       return;
     }
     case "safe_unlink": {
