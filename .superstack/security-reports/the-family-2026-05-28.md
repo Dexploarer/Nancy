@@ -253,7 +253,7 @@ All eight fixable findings were patched and verified (`bun run verify` → 117 p
 | # | Fix | Location |
 |---|-----|----------|
 | H-1 | `getAnalytics` now calls `requireMember(chatId, telegramUserId)` first — non-members get rejected | `poolService.ts` |
-| H-2 | DB TLS now `rejectUnauthorized: true` (verifies against system CA; CA-pin fallback documented) | `pgPoolConfig.ts` (+test) |
+| H-2 | DB TLS verified by pinning the **Supabase Root 2021 CA** alongside the public roots, `rejectUnauthorized: true`. (A live `SELECT 1` proved `rejectUnauthorized:true` alone fails — Supabase uses a private root absent from public/Bun trust stores. Now verified end-to-end against the live DB.) | `pgPoolConfig.ts`, `certs/supabase-root-2021-ca.crt` (+test) |
 | M-1 | `verifyTelegramInitData` enforces `auth_date` freshness (24h default, injectable clock) | `telegramInitData.ts` (+3 tests) |
 | M-2 | `resolveTelegramUserId` now gates raw `telegramUserId` behind `appEnv !== "production"` | `server.ts` |
 | M-3 | Per-client (60/min) + global (600/min) fixed-window rate limiter on `/api/*`, returns 429 | `rateLimiter.ts`, `server.ts` (+6 tests) |
@@ -261,7 +261,9 @@ All eight fixable findings were patched and verified (`bun run verify` → 117 p
 | L-2 | All three `prepare` entry points (callback/command/prompt) now require `requireTraderAccess` | `safeCallbacks.ts`, `bot.ts`, `prompts.ts` |
 | I-1 | `verify` GitHub Actions workflow (min permissions, runs `bun run verify`) | `.github/workflows/verify.yml` |
 
-**Still requires user action:** L-3 — rotate the Supabase DB password and `SAFE_API_KEY` (shared in plaintext during development) and, for production, set `SUPABASE_CA_PATH` only if the pooler ever presents a private cert.
+**Verification:** `bun run verify` (117 pass / 0 fail), typecheck, static acceptance, and `bun run sim:full` all green. Live Supabase TLS proven via `SELECT 1` through the real `buildPgPoolConfig` (verification ON). Bot restarted and stable; security headers confirmed on live responses. L-1 CSP verified by construction (allowlist covers every resource the wallet pages load) + headers served; an in-browser tap-through is still worth a 30-second check on next live signing (the chrome-devtools MCP couldn't attach — stale profile lock).
+
+**Still requires user action (L-3):** rotate the Supabase DB password and `SAFE_API_KEY` — both were shared in plaintext during development. These can only be rotated from the Supabase dashboard (Settings → Database → Reset password) and the Safe/Transaction-Service dashboard respectively; update `.env` afterward. The L-2 prepare gate is also a deliberate behavior change (a plain member can prepare their own withdrawal but not trade/flap).
 
 ## Confidence calibration
 
