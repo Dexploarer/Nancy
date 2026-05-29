@@ -15,6 +15,7 @@ import { renderPoolPage } from "./poolPage.js";
 import { verifyTelegramInitData } from "./telegramInitData.js";
 import { serializePoolAnalytics } from "./poolAnalyticsResponse.js";
 import { configureTelegramBot } from "../bot/telegramCommands.js";
+import { FixedWindowRateLimiter, clientKeyFromHeaders } from "./rateLimiter.js";
 
 const SignaturePayloadSchema = z.object({
   telegramUserId: z.string().regex(/^\d+$/).optional(),
@@ -43,10 +44,30 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
   const webhookPath = config.telegramWebhookSecret === undefined ? undefined : `/telegram/${config.telegramWebhookSecret}`;
   const webhookHandler = webhookPath === undefined ? undefined : webhookCallback(appState.bot, "bun");
 
+  // 60 req/min per client and 600 req/min across all clients (backstop against
+  // spoofed client headers) on the unauthenticated /api/* surface.
+  const perClientApiLimiter = new FixedWindowRateLimiter(60, 60_000);
+  const globalApiLimiter = new FixedWindowRateLimiter(600, 60_000);
+
   return function fetch(request: Request): Response | Promise<Response> {
     const url = new URL(request.url);
+    // The Telegram webhook response goes straight back to Telegram, so it skips the
+    // browser security headers applied to every other (user-facing) response.
+    if (request.method === "POST" && webhookPath !== undefined && url.pathname === webhookPath && webhookHandler !== undefined) {
+      return webhookHandler(request);
+    }
+    return withSecurityHeaders(dispatch(request, url));
+  };
+
+  async function dispatch(request: Request, url: URL): Promise<Response> {
     if (request.method === "GET" && url.pathname === "/health") {
       return Response.json({ ok: true });
+    }
+    if (url.pathname.startsWith("/api/")) {
+      const allowed = globalApiLimiter.allow("*") && perClientApiLimiter.allow(clientKeyFromHeaders(request.headers));
+      if (!allowed) {
+        return Response.json({ error: "Too many requests" }, { status: 429 });
+      }
     }
     if (request.method === "GET" && url.pathname.startsWith("/sign/")) {
       return route(async () => renderSafeSigningPage(appState, url.pathname, config.walletConnectProjectId, config.bscChainId));
@@ -88,11 +109,34 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
     if (request.method === "POST" && url.pathname.startsWith("/api/safe-executions/")) {
       return route(async () => submitSafeExecution(appState, request, url.pathname));
     }
-    if (request.method === "POST" && webhookPath !== undefined && url.pathname === webhookPath && webhookHandler !== undefined) {
-      return webhookHandler(request);
-    }
     return Response.json({ error: "Not found" }, { status: 404 });
-  };
+  }
+}
+
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'none'",
+  "object-src 'none'",
+  "img-src 'self' data:",
+  "style-src 'self' 'unsafe-inline'",
+  // Pages use inline bootstrap scripts and load the Telegram + WalletConnect SDKs
+  // from these CDNs; viem/WalletConnect may use eval/wasm, hence 'unsafe-eval'.
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org https://esm.sh",
+  // Same-origin analytics fetch, JSON-RPC over https, WalletConnect relay over wss.
+  "connect-src 'self' https: wss:",
+  "frame-src https:"
+].join("; ");
+
+// Apply defense-in-depth headers to every user-facing response. The CSP is
+// permissive on inline/eval scripts (the pages rely on them) but still blocks
+// plugins, base-tag hijacking, and constrains script/connect origins; output is
+// already HTML-escaped, so this is hardening rather than the primary XSS defense.
+async function withSecurityHeaders(result: Response | Promise<Response>): Promise<Response> {
+  const response = await result;
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("Referrer-Policy", "no-referrer");
+  response.headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  return response;
 }
 
 export async function startHttpRuntime(appState: App, config: AppConfig): Promise<void> {
@@ -252,7 +296,7 @@ async function submitSafeSignature(appState: App, config: AppConfig, request: Re
     submissionId,
     parseAddress(payload.ownerAddress),
     parseHex(payload.signature, "signature"),
-    resolveTelegramUserId(payload, config.telegramBotToken)
+    resolveTelegramUserId(payload, config)
   );
   await notifyGroup(appState.bot, submission.chatId, `🖊️ An owner just signed Safe tx ${submission.id}. Status: ${submission.status}.`);
   return Response.json({
@@ -262,11 +306,14 @@ async function submitSafeSignature(appState: App, config: AppConfig, request: Re
   });
 }
 
-function resolveTelegramUserId(payload: z.infer<typeof SignaturePayloadSchema>, telegramBotToken: string): string {
+function resolveTelegramUserId(payload: z.infer<typeof SignaturePayloadSchema>, config: AppConfig): string {
   if (payload.telegramInitData !== undefined && payload.telegramInitData.length > 0) {
-    return verifyTelegramInitData(payload.telegramInitData, telegramBotToken);
+    return verifyTelegramInitData(payload.telegramInitData, config.telegramBotToken);
   }
-  if (payload.telegramUserId !== undefined) {
+  // A raw telegramUserId is unauthenticated, so it is only trusted outside production
+  // (local/test). In production the caller must prove identity with signed initData,
+  // matching the body/query resolvers below.
+  if (config.appEnv !== "production" && payload.telegramUserId !== undefined) {
     return payload.telegramUserId;
   }
   throw new UserInputError("Telegram user identity is required");

@@ -170,7 +170,7 @@ export async function runFullSimulation(): Promise<FullSimulationResult> {
     ],
     createdAt: new Date("2026-05-27T00:00:00.000Z")
   });
-  const tradeSubmission = await safeSubmissionService.prepareTradeSubmission(chatId, "trade_sim");
+  const tradeSubmission = await safeSubmissionService.prepareTradeSubmission(chatId, "trade_sim", "owner-1");
   await submitOwnerSignature(safeSubmissionService, tradeSubmission, ownerOne);
   const tradeConfirmationsAfterFirstSignature = safeService.confirmationCount(tradeSubmission.safeTxHash);
   const tradeExecutionRejectedBeforeThreshold = await expectFailure(safeSubmissionService.execute(tradeSubmission.id));
@@ -195,7 +195,7 @@ export async function runFullSimulation(): Promise<FullSimulationResult> {
     withdrawalBps: 5000
   });
   const afterWithdrawalQueued = await poolService.getAnalytics(chatId, "member-a");
-  const withdrawalSubmission = await safeSubmissionService.prepareWithdrawalSubmission(chatId, withdrawal.id);
+  const withdrawalSubmission = await safeSubmissionService.prepareWithdrawalSubmission(chatId, withdrawal.id, "member-a");
   await submitOwnerSignature(safeSubmissionService, withdrawalSubmission, ownerOne);
   const withdrawalConfirmationsAfterFirstSignature = safeService.confirmationCount(withdrawalSubmission.safeTxHash);
   await submitOwnerSignature(safeSubmissionService, withdrawalSubmission, ownerTwo);

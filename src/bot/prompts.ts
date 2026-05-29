@@ -368,10 +368,10 @@ export const PROMPT_FLOWS: Record<string, PromptFlow> = {
       const sourceId = required(values, 1);
       const submission =
         source === "trade"
-          ? await c.deps.safeSubmissionService.prepareTradeSubmission(c.chatId, sourceId)
+          ? await c.deps.safeSubmissionService.prepareTradeSubmission(c.chatId, sourceId, c.telegramUserId)
           : source === "flap"
-            ? await c.deps.safeSubmissionService.prepareFlapLaunchSubmission(c.chatId, sourceId)
-            : await c.deps.safeSubmissionService.prepareWithdrawalSubmission(c.chatId, sourceId);
+            ? await c.deps.safeSubmissionService.prepareFlapLaunchSubmission(c.chatId, sourceId, c.telegramUserId)
+            : await c.deps.safeSubmissionService.prepareWithdrawalSubmission(c.chatId, sourceId, c.telegramUserId);
       await c.reply(formatSafeSubmission(submission), safeSubmissionKeyboard(submission.id, c.deps.config.publicBaseUrl, false));
     }
   },

@@ -83,16 +83,17 @@ export function registerSafeCallbacks(bot: Bot, dependencies: BotDependencies): 
   bot.callbackQuery(/^prepare:/, async (ctx) => {
     await handleCallback(ctx, async () => {
       const chatId = requireChatId(ctx.chat?.id);
+      const fromId = requireTelegramUserId(ctx.from?.id);
       const rest = ctx.callbackQuery.data.slice("prepare:".length);
       const separator = rest.indexOf(":");
       const source = rest.slice(0, separator);
       const sourceId = rest.slice(separator + 1);
       const submission =
         source === "trade"
-          ? await dependencies.safeSubmissionService.prepareTradeSubmission(chatId, sourceId)
+          ? await dependencies.safeSubmissionService.prepareTradeSubmission(chatId, sourceId, fromId)
           : source === "flap"
-            ? await dependencies.safeSubmissionService.prepareFlapLaunchSubmission(chatId, sourceId)
-            : await dependencies.safeSubmissionService.prepareWithdrawalSubmission(chatId, sourceId);
+            ? await dependencies.safeSubmissionService.prepareFlapLaunchSubmission(chatId, sourceId, fromId)
+            : await dependencies.safeSubmissionService.prepareWithdrawalSubmission(chatId, sourceId, fromId);
       await ctx.answerCallbackQuery();
       await ctx.reply(formatSafeSubmission(submission), {
         reply_markup: safeSubmissionKeyboard(submission.id, dependencies.config.publicBaseUrl, ctx.chat?.type === "private")

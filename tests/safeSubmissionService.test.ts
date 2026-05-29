@@ -107,7 +107,8 @@ describe("SafeSubmissionService", () => {
       createdAt: new Date("2026-05-27T00:00:00.000Z")
     });
 
-    const submission = await service.prepareTradeSubmission("123", "trade_1");
+    await poolService.initializePool("123", "456");
+    const submission = await service.prepareTradeSubmission("123", "trade_1", "456");
     const submitted = await service.submitOwnerSignature(
       submission.id,
       "0x2222222222222222222222222222222222222222",
@@ -160,7 +161,7 @@ describe("SafeSubmissionService", () => {
       withdrawalBps: 5000
     });
 
-    const submission = await service.prepareWithdrawalSubmission("123", withdrawal.id);
+    const submission = await service.prepareWithdrawalSubmission("123", withdrawal.id, "456");
     const preparedAnalytics = await poolService.getAnalytics("123", "456");
     const transactionHash = await service.execute(submission.id);
     const executedAnalytics = await poolService.getAnalytics("123", "456");

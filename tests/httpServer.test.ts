@@ -201,7 +201,8 @@ describe("HTTP fetch handler", () => {
       transactions: [{ to: "0x7777777777777777777777777777777777777777", value: parseEther("1"), data: "0x", label: "buy" }],
       createdAt: new Date("2026-05-27T00:00:00.000Z")
     });
-    const submission = await safeSubmissionService.prepareTradeSubmission("chat", "trade_http");
+    await poolService.initializePool("chat", "111");
+    const submission = await safeSubmissionService.prepareTradeSubmission("chat", "trade_http", "111");
     const signature = await account.signMessage({ message: { raw: submission.safeTxHash } });
 
     const appState = { walletLinkService, safeSubmissionService, poolService } as unknown as App;

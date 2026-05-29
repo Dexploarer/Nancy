@@ -149,6 +149,12 @@ export class PoolService {
     }
   }
 
+  // Any member of THIS pool. Blocks outsiders and cross-group callers while still
+  // letting a member act on their own pool (e.g. prepare their own withdrawal).
+  async requirePoolMembership(chatId: ChatId, telegramUserId: string): Promise<void> {
+    await this.requireMember(chatId, telegramUserId);
+  }
+
   async creditDeposit(input: {
     chatId: ChatId;
     telegramUserId: string;
@@ -469,6 +475,10 @@ export class PoolService {
   }
 
   async getAnalytics(chatId: ChatId, telegramUserId: string): Promise<PoolAnalytics> {
+    // Access control: pool analytics expose every member's identity and finances,
+    // so only a member of THIS pool may read it. Without this guard any caller with
+    // a valid Telegram identity could read any group's pool by chat id (IDOR).
+    await this.requireMember(chatId, telegramUserId);
     return buildPoolAnalytics({
       repository: this.repository,
       poolRepository: this.poolRepository,

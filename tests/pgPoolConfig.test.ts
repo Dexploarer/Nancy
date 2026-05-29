@@ -8,18 +8,18 @@ describe("buildPgPoolConfig", () => {
     expect(config.connectionString).toBe("postgresql://postgres:pw@localhost:5432/the_family");
   });
 
-  it("enables SSL (no CA verification) for a remote host like Supabase", () => {
+  it("enables verified SSL for a remote host like Supabase", () => {
     const config = buildPgPoolConfig(
       "postgresql://postgres.ref:pw@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
     );
-    expect(config.ssl).toEqual({ rejectUnauthorized: false });
+    expect(config.ssl).toEqual({ rejectUnauthorized: true });
   });
 
   it("strips sslmode from the connection string so it cannot override the ssl object", () => {
     const config = buildPgPoolConfig(
       "postgresql://postgres:pw@db.ref.supabase.co:5432/postgres?sslmode=require"
     );
-    expect(config.ssl).toEqual({ rejectUnauthorized: false });
+    expect(config.ssl).toEqual({ rejectUnauthorized: true });
     expect(config.connectionString).not.toContain("sslmode");
   });
 
@@ -30,6 +30,6 @@ describe("buildPgPoolConfig", () => {
 
   it("respects an explicit sslmode=require even on localhost", () => {
     const config = buildPgPoolConfig("postgresql://u:p@localhost:5432/db?sslmode=require");
-    expect(config.ssl).toEqual({ rejectUnauthorized: false });
+    expect(config.ssl).toEqual({ rejectUnauthorized: true });
   });
 });

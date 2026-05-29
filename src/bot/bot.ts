@@ -305,16 +305,17 @@ export function createBot(dependencies: BotDependencies): Bot {
   bot.command("safe_prepare", async (ctx) => {
     await handleUserCommand(ctx, "safe_prepare", async () => {
       const chatId = requireChatId(ctx.chat?.id);
+      const fromId = requireTelegramUserId(ctx.from?.id);
       const parts = splitCommand(ctx.message?.text, 3);
       const sourceType = requiredPart(parts, 1);
       const sourceId = requiredPart(parts, 2);
       const submission =
         sourceType === "trade"
-          ? await dependencies.safeSubmissionService.prepareTradeSubmission(chatId, sourceId)
+          ? await dependencies.safeSubmissionService.prepareTradeSubmission(chatId, sourceId, fromId)
           : sourceType === "flap"
-            ? await dependencies.safeSubmissionService.prepareFlapLaunchSubmission(chatId, sourceId)
+            ? await dependencies.safeSubmissionService.prepareFlapLaunchSubmission(chatId, sourceId, fromId)
             : sourceType === "withdrawal"
-              ? await dependencies.safeSubmissionService.prepareWithdrawalSubmission(chatId, sourceId)
+              ? await dependencies.safeSubmissionService.prepareWithdrawalSubmission(chatId, sourceId, fromId)
               : null;
       if (submission === null) {
         throw new InvalidInputError("The source must be trade, flap, or withdrawal.");

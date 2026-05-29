@@ -28,7 +28,12 @@ export class SafeSubmissionService {
     private readonly platformFeeRecipient: Address
   ) {}
 
-  async prepareTradeSubmission(chatId: ChatId, proposalId: string): Promise<SafeSubmission> {
+  // Trade/flap prepares spend group funds, so they require trader/owner access.
+  // Withdrawal prepare requires only pool membership, so a member can prepare their
+  // own queued withdrawal. All three block outsiders and cross-group callers; prepare
+  // has no HTTP route, so these checks are the access boundary for the bot entry points.
+  async prepareTradeSubmission(chatId: ChatId, proposalId: string, telegramUserId: string): Promise<SafeSubmission> {
+    await this.poolService.requireTraderAccess(chatId, telegramUserId);
     const proposal = await this.repository.getTradeProposal(proposalId);
     if (proposal === null || proposal.chatId !== chatId) {
       throw new UserInputError("Trade proposal not found", { proposalId });
@@ -36,7 +41,8 @@ export class SafeSubmissionService {
     return this.prepareSubmission(chatId, "trade", proposal.id, proposal.transactions);
   }
 
-  async prepareFlapLaunchSubmission(chatId: ChatId, proposalId: string): Promise<SafeSubmission> {
+  async prepareFlapLaunchSubmission(chatId: ChatId, proposalId: string, telegramUserId: string): Promise<SafeSubmission> {
+    await this.poolService.requireTraderAccess(chatId, telegramUserId);
     const proposal = await this.repository.getFlapLaunch(proposalId);
     if (proposal === null || proposal.chatId !== chatId) {
       throw new UserInputError("Flap launch proposal not found", { proposalId });
@@ -44,7 +50,8 @@ export class SafeSubmissionService {
     return this.prepareSubmission(chatId, "flap-launch", proposal.id, proposal.transactions);
   }
 
-  async prepareWithdrawalSubmission(chatId: ChatId, withdrawalId: string): Promise<SafeSubmission> {
+  async prepareWithdrawalSubmission(chatId: ChatId, withdrawalId: string, telegramUserId: string): Promise<SafeSubmission> {
+    await this.poolService.requirePoolMembership(chatId, telegramUserId);
     const transactions = await this.poolService.getWithdrawalTransactions(chatId, withdrawalId, this.platformFeeRecipient);
     const submission = await this.prepareSubmission(chatId, "withdrawal", withdrawalId, transactions);
     await this.poolService.markWithdrawalPrepared(chatId, withdrawalId, submission.id);

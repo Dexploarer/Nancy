@@ -1,0 +1,25 @@
+name: verify
+
+# Runs the standard gate (typecheck + tests + static acceptance) on every push and PR
+# so regressions and dependency issues are caught before they reach main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: the job only needs to read the repo.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      # NOTE: actions are pinned to major-version tags for readability. For stricter
+      # supply-chain integrity, pin each `uses:` to a full commit SHA.
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run verify

@@ -1,0 +1,274 @@
+# Security Audit — The Family Bot (Nancy)
+
+**Date:** 2026-05-28
+**Auditor:** CSO skill (Claude Code)
+**Scope:** Full audit — code + infrastructure + supply chain + STRIDE
+**Mode:** Daily gate (≥8/10), with a few sub-8 items included because money/funds are in scope
+**Commit context:** branch `lazy-ux-phase1` (non-custodial Safe execution + button UX), working tree dirty
+
+---
+
+## Stack summary (Phase 0)
+
+| Aspect | Value |
+|--------|-------|
+| Language / runtime | TypeScript (strict, NodeNext), **Bun** 1.3.13 |
+| Bot framework | grammy 1.34 (Telegram) |
+| Chain | viem 2.23, BSC chainId 56, Safe multisig (1.4.1), PancakeSwap V2, Flap |
+| DB | Postgres (Supabase pooler) or in-memory, via `STORAGE_DRIVER` |
+| Auth | Wallet ECDSA signatures (on-chain owner recovery) + Telegram initData HMAC + Telegram admin checks |
+| HTTP | `Bun.serve` — webhook, signing/deploy/execute/link pages, pool Mini App, `/api/*` JSON |
+| Deploy target | Self-hosted (launchd KeepAlive), exposed via cloudflared tunnel |
+| Custody | **None** — bot never holds Safe-owner keys; it prepares txs, owners sign+execute from their own wallets |
+
+## Attack surface (Phase 1)
+
+| Entry point | Type | Auth | Notes |
+|---|---|---|---|
+| `POST /telegram/<secret>` | webhook | secret path | grammy webhookCallback |
+| `GET /health` | public | none | ok |
+| `GET /sign /deploy /execute /link /pool/...` | HTML pages | none (record lookup) | render server state |
+| `GET /api/pools/<chatId>/analytics` | JSON | initData (prod) | **no membership check → IDOR (H-1)** |
+| `POST /api/wallet-links` | JSON | initData (prod) | begins a pending link |
+| `POST /api/wallet-links/<nonce>/signatures` | JSON | wallet signature | completes link (proves key control) |
+| `POST /api/safe-submissions/<id>/signatures` | JSON | owner signature | **telegramUserId not prod-gated (M-2)** |
+| `POST /api/safe-deployments/<id>` | JSON | on-chain calldata match | no identity by design (sound) |
+| `POST /api/safe-executions/<id>` | JSON | on-chain calldata match | no identity by design (sound) |
+| `DepositWatcher` (setInterval) | scheduled | n/a | credits only transfers FROM linked wallets, tx-hash dedup (sound) |
+
+---
+
+## Findings
+
+### [HIGH] H-1: Pool analytics leaks every group's full composition (Broken Access Control / IDOR)
+
+**Confidence:** 9/10
+**Phase:** 9 — OWASP A01 / STRIDE Information Disclosure / CWE-639
+**Location:** `src/services/poolAnalyticsBuilder.ts:16-63`, `src/services/poolService.ts:471-479`, `src/http/server.ts:240-246`
+
+**Description:**
+`getAnalytics(chatId, telegramUserId)` delegates straight to `buildPoolAnalytics` with **no check that the caller is a member of `chatId`**. The response includes the whole pool: `members[]` (every member's Telegram user id, role, ownership bps, deposited/withdrawn/active value, PnL), all `withdrawals[]` (user ids + amounts), the group `safeAddress`, and the last 25 `ledger` entries. A non-member just gets a zeroed `member` placeholder (builder line 35) — but still receives everyone else's data. The HTTP endpoint only requires *any* valid `initData` (`resolveTelegramUserIdFromQuery`), not membership of the requested `chatId`.
+
+**Exploit Scenario:**
+1. Attacker is any Telegram user. They open Nancy's Mini App once (or any bot Mini App context) → their client holds a valid `initData` string signed for *their* account.
+2. They learn a target group's `chatId` (Telegram chat ids are low-entropy and leak via forwarded messages, the bot's own posted Mini-App URLs/buttons, and access logs).
+3. `GET /api/pools/<targetChatId>/analytics?telegramInitData=<their own valid initData>` returns the target group's entire pool breakdown — every member's Telegram id, deposit/withdraw history, share %, PnL, and the Safe address.
+4. Repeat across chat ids to harvest the financial profile of every group using the bot.
+
+**Evidence:**
+`buildPoolAnalytics` never calls `requireMember`; `getAnalytics` (poolService.ts:471) does not either (the `requireMember` at line 491 lives in the unrelated `requireOwner`). Contrast with `my_status`/`/portfolio`, which *are* member-gated.
+
+**Remediation:**
+Gate analytics on membership. Minimal fix:
+```ts
+async getAnalytics(chatId: ChatId, telegramUserId: string): Promise<PoolAnalytics> {
+  await this.requireMember(chatId, telegramUserId); // 404/`not found` for non-members
+  return buildPoolAnalytics({ ... });
+}
+```
+If a "preview before joining" view is desired, return a redacted payload (pool-level aggregates only, no per-member rows) for non-members. Either way, never return other members' ids/financials to a non-member.
+
+**Priority:** P0
+
+---
+
+### [HIGH] H-2: Database TLS certificate verification disabled (`rejectUnauthorized: false`)
+
+**Confidence:** 10/10 (config), exploitability requires network position
+**Phase:** 6 / OWASP A04 Cryptographic Failures / CWE-295
+**Location:** `src/storage/pgPoolConfig.ts:26`
+
+**Description:**
+The Postgres (Supabase pooler) connection sets `ssl: { rejectUnauthorized: false }`. The channel is encrypted but the **server certificate is not authenticated**, so a network attacker (DNS/BGP hijack, compromised intermediary, hostile WiFi/transit) can present any cert and transparently MITM the connection. The DB is the accounting source of truth: wallet links (Telegram id ↔ EVM address), the share ledger, NAV snapshots, withdrawal requests, and Safe submissions. MITM = read and *tamper* with all of it (e.g., rewrite a withdrawal recipient or share balances).
+
+**Exploit Scenario:**
+Attacker on the path between the bot host and Supabase intercepts the TLS handshake, presents a self-signed cert (accepted because verification is off), and proxies/modifies queries — e.g., alters `pool_withdrawal_requests.recipient` or inflates a member's `shares`.
+
+**Evidence:** `return needsSsl ? { connectionString, ssl: { rejectUnauthorized: false } } : { connectionString };`
+
+**Remediation:**
+Stop disabling verification. The Supabase pooler (`aws-…pooler.supabase.com`) presents a **publicly-trusted** certificate, so the simplest correct fix is to verify against the system CA bundle:
+```ts
+ssl: { rejectUnauthorized: true }   // keep stripping `sslmode` from the connection string
+```
+Verify once at deploy time (e.g. `openssl s_client -connect <pooler-host>:6543 -servername <pooler-host>` shows `Verify return code: 0 (ok)`). Only if the endpoint presents a private/self-signed cert, fall back to pinning the CA:
+```ts
+import { readFileSync } from "node:fs";
+ssl: { ca: readFileSync(process.env.SUPABASE_CA_PATH!), rejectUnauthorized: true }
+```
+This was previously documented as a "pragmatic" choice — it should not survive to production.
+
+**Priority:** P1
+
+---
+
+### [MEDIUM] M-1: Telegram initData has no `auth_date` freshness check (capture-replay)
+
+**Confidence:** 9/10
+**Phase:** 9 — OWASP A07 Authentication Failures / CWE-294
+**Location:** `src/http/telegramInitData.ts:9-35`
+
+**Description:**
+`verifyTelegramInitData` correctly validates the HMAC (`HMAC(key=HMAC("WebAppData", botToken), dataCheckString)`, constant-time compare) and the `user` field, but **never reads `auth_date`**. Telegram includes `auth_date` precisely so servers can expire stale initData. Without the check, a captured initData string authenticates that user **forever**. The leak surface is non-trivial because the pool-analytics endpoint receives initData in the **GET query string** (`?telegramInitData=...`), which lands in server/proxy/RPC access logs, browser history, and `Referer` headers.
+
+**Exploit Scenario:** Attacker obtains a victim's initData once (shared link, log entry, captured request) and replays it indefinitely to act as that user across `/api/wallet-links`, `/api/pools/.../analytics`, and signature submission.
+
+**Remediation:**
+```ts
+const authDate = Number(params.get("auth_date"));
+const MAX_AGE_S = 86_400; // 24h, tighten as desired
+if (!Number.isFinite(authDate) || (nowSeconds() - authDate) > MAX_AGE_S) {
+  throw new UserInputError("Telegram Web App data has expired — reopen the app");
+}
+```
+Also prefer sending initData in a POST body over the query string to keep it out of logs/Referer.
+
+**Priority:** P1
+
+---
+
+### [MEDIUM] M-2: Signing endpoint trusts client-supplied `telegramUserId` in production
+
+**Confidence:** 8/10
+**Phase:** 9 — OWASP A07
+**Location:** `src/http/server.ts:265-273` (`resolveTelegramUserId`)
+
+**Description:**
+Unlike `resolveTelegramUserIdFromBody` (line 282) and `resolveTelegramUserIdFromQuery` (line 294), which only honor a raw `telegramUserId` when `appEnv !== "production"`, `resolveTelegramUserId` (used by `POST /api/safe-submissions/<id>/signatures`) accepts a raw `telegramUserId` with **no environment gate**. In production a caller can therefore claim any identity without initData. This defeats the `requireLinkedOwner(telegramUserId, ownerAddress)` submitter-binding. The owner **signature** is still recovered and enforced on-chain by the Safe, so this is not a direct fund-theft path — but it removes a defense-in-depth identity check and is inconsistent with the other two resolvers.
+
+**Remediation:** Mirror the other resolvers:
+```ts
+if (config.appEnv !== "production" && payload.telegramUserId !== undefined) return payload.telegramUserId;
+throw new UserInputError("Telegram user identity is required");
+```
+(Pass `config` instead of just the bot token.)
+
+**Priority:** P1
+
+---
+
+### [MEDIUM] M-3: Unauthenticated `/api/*` endpoints with no rate limiting (DoS / cost amplification)
+
+**Confidence:** 7/10
+**Phase:** 9 — OWASP A06 Insecure Design / STRIDE Denial of Service
+**Location:** `src/http/server.ts` (all `/api/*` handlers); no rate limiter anywhere in the codebase
+
+**Description:**
+`POST /api/safe-executions/<id>` and `POST /api/safe-deployments/<id>` are unauthenticated and call `waitForTransactionReceipt` (bounded to 60s — `safeService.ts:195`, `safeDeploymentService.ts:109`). An attacker can fire many requests with well-formed-but-nonexistent tx hashes; each holds a request handler for up to 60s and polls the RPC the whole time → connection/event-loop pressure and RPC-quota/bill exhaustion. `POST /api/wallet-links` and the signature endpoints perform unauthenticated DB writes (pending links) → spam/DB growth. (Note: `safeDeploymentService.ts:77`, the bot-key deploy path, has *no* receipt timeout — not on a public route, but it can hang the bot; add a timeout for robustness.)
+
+**Remediation:** Add a simple per-IP token-bucket limiter to `/api/*`; cap concurrent in-flight receipt waits; optionally do a fast `getTransaction` existence probe before the long `waitForTransactionReceipt`. Put the tunnel/host behind Cloudflare rate limiting as defense-in-depth.
+
+**Priority:** P2
+
+---
+
+### [LOW] L-1: No security headers / CSP on served pages
+
+**Confidence:** 8/10
+**Phase:** 9 — OWASP A02 Security Misconfiguration
+**Location:** `src/http/server.ts` HTML responses; page renderers in `src/http/*Page.ts`
+
+**Description:**
+The `/link`, `/sign`, `/deploy`, `/execute`, `/pool` pages return HTML with only `Content-Type` set — no `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, or `Referrer-Policy`. Output is currently escaped (no live XSS — see Dismissed), and the pages load scripts from external CDNs (WalletConnect, telegram.org). CSP would cap the blast radius of any future templating mistake; `Referrer-Policy: no-referrer` also reduces initData-in-URL leakage via `Referer` (ties to M-1).
+
+**Remediation:** Add a shared header set to HTML/JSON responses: a CSP allowing `'self'` + the specific CDN origins used, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`.
+
+**Priority:** P2
+
+---
+
+### [LOW] L-2: `prepare:` builders have no explicit trader/owner access gate
+
+**Confidence:** 6/10
+**Phase:** 9 — OWASP A01 (minor)
+**Location:** `src/bot/safeCallbacks.ts:83-101`; `src/services/safeSubmissionService.ts` (`prepareTradeSubmission`/`prepareFlapLaunchSubmission`/`prepareWithdrawalSubmission` — no `requireTraderAccess`/`requireOwner`)
+
+**Description:**
+The `prepare:` callback only checks `requireChatId`, and the prepare* service methods don't enforce role. Any group member can turn an existing proposal/withdrawal into a Safe submission. This does not move funds (execution still needs on-chain-verified owner signatures meeting threshold), so the impact is griefing — churning Safe nonce slots / spamming submissions — not theft.
+
+**Remediation:** Gate prepare behind `requireTraderAccess` (trade/flap) and ownership of the withdrawal (withdrawal), matching the corresponding command handlers.
+
+**Priority:** P3
+
+---
+
+### [LOW] L-3: Rotate secrets shared in plaintext during development
+
+**Confidence:** N/A (operational)
+**Phase:** 2 — Secrets Archaeology
+**Description:** The Supabase DB password and the `SAFE_API_KEY` JWT were pasted in plaintext during development sessions. `.env` is gitignored (baseline OK; `.mcp.json` carries no secret — only the project URL). Rotate the DB password and `SAFE_API_KEY`. `WALLETCONNECT_PROJECT_ID` is a public client identifier, not a secret. For production, prefer a secrets manager / KMS over a flat `.env`.
+**Priority:** P2
+
+---
+
+### [INFO] I-1: No CI pipeline
+No `.github/workflows`. Neutral for supply-chain risk (nothing to compromise), but there's no automated `bun run verify` / dependency-audit gate before deploy. Consider adding one.
+
+---
+
+## Dismissed (verified NOT issues)
+
+- **SQL injection** — all Postgres queries are parameterized (`$1,$2,…`); no string concatenation found.
+- **Secret logging** — no `Logger.*` call logs tokens/keys/signatures/initData/passwords.
+- **Dependency CVEs** — `bun audit` → "No vulnerabilities found."
+- **Reflected XSS on `/pool/<chatId>`** — `chatId` is `escapeAttribute`'d into the attribute, read client-side via `dataset` + `encodeURIComponent`, and all rendered data uses `esc()`. Other pages look up real records (404 on miss) and interpolate only hex/address/numeric values.
+- **Identity-free `/api/safe-deployments` & `/api/safe-executions`** — sound by design: `verifyWalletDeployment` recomputes the expected CREATE2 Safe address from the *session's* owners/threshold/salt and rejects mismatches; `verifyExecution` decodes the on-chain `execTransaction` and matches `to/value/data/operation` against the submission, requiring `status: success`. A caller cannot link a different Safe or finalize a tx that didn't actually happen.
+- **Withdrawal double-execution / replay** — Safe nonce + on-chain signature/threshold enforcement + tx-hash-verified finalize.
+- **Deposit watcher spoofing** — credits only native transfers whose `from` is a linked wallet (key-control proven at link time), amount read on-chain, dedup via unique index on `lower(transaction_hash)`.
+- **Signature crypto** (`safeSignatures.ts`) — recovers against the signed `safeTxHash`, checks recovery == owner, dedups + sorts owners ascending and adjusts the `v` byte correctly for Safe; the Safe contract is the final on-chain arbiter.
+
+---
+
+## STRIDE summary (Phase 10)
+
+| Component | Top threat | Status |
+|---|---|---|
+| Safe signing/execution | Tampering / Elevation | Mitigated on-chain (Safe verifies sigs+threshold+calldata) |
+| Telegram identity | Spoofing | HMAC OK, but **no replay expiry (M-1)** + **prod telegramUserId bypass (M-2)** |
+| Pool analytics | Information Disclosure | **Broken (H-1)** |
+| DB channel | Tampering / Info Disclosure | **Unauthenticated TLS (H-2)** |
+| HTTP API | Denial of Service | **No rate limiting (M-3)** |
+| Deposits/withdrawals | Tampering | Mitigated (on-chain amount + dedup + value-conserving lifecycle) |
+
+## Data classification (Phase 11)
+
+- **Financial / PII:** Telegram user ids ↔ EVM addresses, per-member deposit/withdraw/PnL, Safe addresses, ledger. Stored in Postgres. **Exposed cross-tenant by H-1; channel unauthenticated by H-2.**
+- **Auth credentials:** `TELEGRAM_BOT_TOKEN`, `SAFE_API_KEY`, DB password — in `.env` (gitignored). No Safe-owner private keys are ever stored (non-custodial) — the single biggest risk class is absent by design.
+
+---
+
+## Remediation roadmap
+
+| Priority | Findings | Est. effort |
+|---|---|---|
+| **P0** | H-1 (analytics IDOR) | ~15 min (1-line `requireMember` + test) |
+| **P1** | H-2 (DB CA pinning), M-1 (auth_date), M-2 (prod gate) | ~1–2 h total |
+| **P2** | M-3 (rate limiting), L-1 (headers/CSP), L-3 (rotate secrets) | ~2–3 h |
+| **P3** | L-2 (prepare gate), I-1 (CI) | ~1 h |
+
+## Remediation applied (2026-05-28)
+
+All eight fixable findings were patched and verified (`bun run verify` → 117 pass / 0 fail, typecheck clean, static acceptance passed; `bun run sim:full` → money flow intact).
+
+| # | Fix | Location |
+|---|-----|----------|
+| H-1 | `getAnalytics` now calls `requireMember(chatId, telegramUserId)` first — non-members get rejected | `poolService.ts` |
+| H-2 | DB TLS now `rejectUnauthorized: true` (verifies against system CA; CA-pin fallback documented) | `pgPoolConfig.ts` (+test) |
+| M-1 | `verifyTelegramInitData` enforces `auth_date` freshness (24h default, injectable clock) | `telegramInitData.ts` (+3 tests) |
+| M-2 | `resolveTelegramUserId` now gates raw `telegramUserId` behind `appEnv !== "production"` | `server.ts` |
+| M-3 | Per-client (60/min) + global (600/min) fixed-window rate limiter on `/api/*`, returns 429 | `rateLimiter.ts`, `server.ts` (+6 tests) |
+| L-1 | `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` on all user-facing responses | `server.ts` |
+| L-2 | All three `prepare` entry points (callback/command/prompt) now require `requireTraderAccess` | `safeCallbacks.ts`, `bot.ts`, `prompts.ts` |
+| I-1 | `verify` GitHub Actions workflow (min permissions, runs `bun run verify`) | `.github/workflows/verify.yml` |
+
+**Still requires user action:** L-3 — rotate the Supabase DB password and `SAFE_API_KEY` (shared in plaintext during development) and, for production, set `SUPABASE_CA_PATH` only if the pooler ever presents a private cert.
+
+## Confidence calibration
+
+- Total findings: 9 (excluding dismissed)
+- HIGH: 2 (avg 9.5/10)
+- MEDIUM: 3 (avg 8/10)
+- LOW: 3 (avg 7/10 / operational)
+- INFO: 1
+- False positives filtered: 7 (see Dismissed)
+- Mode: Daily (8/10 gate), select sub-8 items included due to funds in scope
