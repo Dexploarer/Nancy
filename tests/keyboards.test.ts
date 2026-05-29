@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   connectWalletKeyboard,
+  dmActionKeyboard,
   deployPageKeyboard,
   executePageKeyboard,
   flapLaunchKeyboard,
@@ -68,6 +69,12 @@ describe("page-open keyboards", () => {
   it("connect-wallet button opens the connect-first link page as a WebApp", () => {
     const b = buttons(connectWalletKeyboard("https://x.test"))[0]!;
     expect(b.web_app?.url).toBe("https://x.test/link");
+  });
+
+  it("group fallback deep-links into the bot DM carrying the start action", () => {
+    const b = buttons(dmActionKeyboard("nancy_bsc_bot", "link", "Link in our DM →"))[0]!;
+    expect(b.url).toBe("https://t.me/nancy_bsc_bot?start=link");
+    expect(b.text).toBe("Link in our DM →");
   });
 
   it("deploy button points at the deploy page for the session", () => {

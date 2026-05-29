@@ -5,7 +5,7 @@ import { Logger } from "../logger.js";
 import { renderUsage } from "./commandUsage.js";
 import { requireChatId, requireGroupAdmin, requireTelegramUserId } from "./commandUtils.js";
 import { formatGeneratedWallet, formatWallet } from "./formatters.js";
-import { confirmUnlinkKeyboard, connectWalletKeyboard, promptStepKeyboard } from "./keyboards.js";
+import { confirmUnlinkKeyboard, connectWalletKeyboard, dmActionKeyboard, promptStepKeyboard } from "./keyboards.js";
 import { formatMyStatus, formatPoolAnalytics, formatPortfolio } from "./poolCommands.js";
 import {
   getFlow,
@@ -218,11 +218,19 @@ async function sendPrivately(ctx: Context, telegramUserId: string, text: string,
 
 async function beginLinkWallet(deps: BotDependencies, ctx: Context): Promise<void> {
   // In a DM we can identify the user from initData, so offer the zero-typing
-  // connect-first flow. In a group there is no initData, so fall back to the
-  // type-the-address prompt.
+  // connect-first flow. In a group there is no initData and WebApp buttons are not
+  // allowed, so bounce into the DM with one tap (still zero typing) instead of
+  // making the user paste an address.
   if (ctx.chat?.type === "private") {
     await ctx.reply("Tap to connect your wallet — no address to type.", {
       reply_markup: connectWalletKeyboard(deps.config.publicBaseUrl)
+    });
+    return;
+  }
+  const botUsername = ctx.me?.username;
+  if (botUsername !== undefined) {
+    await ctx.reply("Let's link your wallet in our DM — tap below, connect, sign once. Zero typing.", {
+      reply_markup: dmActionKeyboard(botUsername, "link", "Link wallet in our DM →")
     });
     return;
   }
@@ -242,6 +250,13 @@ export async function handleMenuSelection(deps: BotDependencies, ctx: Context, c
     case "wallet_generate": {
       const fromId = requireTelegramUserId(ctx.from?.id);
       if (ctx.chat?.type !== "private") {
+        const botUsername = ctx.me?.username;
+        if (botUsername !== undefined) {
+          await ctx.reply("A new wallet shows a private key, so let's do it in our DM. Tap below — one tap, key shown only to you.", {
+            reply_markup: dmActionKeyboard(botUsername, "generate", "Generate wallet in our DM →")
+          });
+          return;
+        }
         await ctx.reply("DM me to generate a wallet so your private key stays private. Open a private chat with me and tap Generate wallet there.");
         return;
       }

@@ -87,6 +87,14 @@ export function connectWalletKeyboard(publicBaseUrl: string | undefined): Inline
   return new InlineKeyboard().webApp("Connect & link wallet", `${baseUrl(publicBaseUrl)}/link`);
 }
 
+// Group chats can't open WebApp buttons or read Telegram initData, and a private key
+// must never be shown in a group — so wallet generate/link bounce the user into the
+// bot DM via a t.me deep link that carries the action (e.g. ?start=link). One tap,
+// zero typing, and the private flow runs where Telegram allows it.
+export function dmActionKeyboard(botUsername: string, startParam: string, label: string): InlineKeyboard {
+  return new InlineKeyboard().url(label, `https://t.me/${botUsername}?start=${encodeURIComponent(startParam)}`);
+}
+
 export function safeSubmissionKeyboard(submissionId: string, publicBaseUrl: string | undefined, preferWebApp: boolean): InlineKeyboard {
   return pageOpenButton("Open & sign", `${baseUrl(publicBaseUrl)}/sign/${encodeURIComponent(submissionId)}`, preferWebApp)
     .row()

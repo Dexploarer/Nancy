@@ -74,6 +74,15 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   bot.command("start", async (ctx) => {
+    // Group "Generate/Link wallet" buttons deep-link here in the DM
+    // (t.me/<bot>?start=link|generate) so the private flow finishes with one tap.
+    const deepLink = (ctx.match ?? "").trim();
+    if (deepLink === "link" || deepLink === "generate") {
+      await handleUserCommand(ctx, "start", async () => {
+        await handleMenuSelection(dependencies, ctx, deepLink === "link" ? "link_start" : "wallet_generate");
+      });
+      return;
+    }
     await ctx.reply(
       [
         "💛 Hey sugar — Nancy here, the Golden Girl of Binance.",
