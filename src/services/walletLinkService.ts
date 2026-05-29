@@ -62,6 +62,14 @@ export class WalletLinkService {
     if (link === null) {
       throw new UserInputError("Start wallet linking before submitting a signature");
     }
+    // One linked owner per address: otherwise the deposit watcher can't attribute a
+    // transfer from this address to a single member unambiguously.
+    const otherOwners = (await this.repository.getLinkedWalletsByAddress(address)).filter(
+      (other) => other.telegramUserId !== telegramUserId
+    );
+    if (otherOwners.length > 0) {
+      throw new UserInputError("That wallet is already linked to another Telegram account.");
+    }
     const valid = await verifyMessage({
       address,
       message: buildWalletLinkMessage(link),

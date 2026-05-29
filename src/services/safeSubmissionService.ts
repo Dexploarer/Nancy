@@ -94,6 +94,10 @@ export class SafeSubmissionService {
       return updated;
     }
 
+    const status = await this.safeService.getTransaction(submission.transactionServiceUrl, submission.safeTxHash);
+    if (extractConfirmations(status).some((confirmation) => confirmation.owner.toLowerCase() === ownerAddress.toLowerCase())) {
+      throw new UserInputError("You have already signed this Safe transaction.");
+    }
     await this.safeService.confirmTransaction({
       serviceUrl: submission.transactionServiceUrl,
       safeTxHash: submission.safeTxHash,

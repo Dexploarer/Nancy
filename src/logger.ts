@@ -1,5 +1,8 @@
 import pino from "pino";
 
+// LOG_LEVEL is read here at module load — the one deliberate exception to
+// "env vars are only read in config.ts" — because the logger is imported before
+// loadConfig() runs and must work during bootstrap. Documented in .env.example.
 const logger = pino({
   level: process.env["LOG_LEVEL"] ?? "info",
   base: null

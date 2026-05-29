@@ -30,4 +30,19 @@ describe("WalletLinkService", () => {
     expect((stored as Record<string, unknown> | null)?.["encryptedPrivateKey"]).toBeUndefined();
     await expect(service.requireLinkedOwner("123", result.link.address)).resolves.toBeUndefined();
   });
+
+  it("rejects linking a wallet already linked to a different Telegram user", async () => {
+    const repository = new MemoryRepository();
+    const service = new WalletLinkService(repository);
+    const account = privateKeyToAccount("0x59c6995e998f97a5a004497e5da5cf9e7ae6b36f10a0edbb1d5828dce3f2b0b5");
+    const { link } = await service.beginLink("123", account.address);
+    await service.completeLink("123", account.address, await account.signMessage({ message: buildWalletLinkMessage(link) }));
+
+    // A second Telegram user tries to claim the same address — must be rejected
+    // before signature verification so the deposit watcher attributes deposits uniquely.
+    await service.beginLink("456", account.address);
+    await expect(service.completeLink("456", account.address, `0x${"11".repeat(65)}`)).rejects.toThrow(
+      "already linked to another"
+    );
+  });
 });

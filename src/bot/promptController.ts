@@ -5,7 +5,7 @@ import { Logger } from "../logger.js";
 import { renderUsage } from "./commandUsage.js";
 import { requireChatId, requireGroupAdmin, requireTelegramUserId } from "./commandUtils.js";
 import { formatGeneratedWallet, formatWallet } from "./formatters.js";
-import { confirmUnlinkKeyboard, connectWalletKeyboard, dmActionKeyboard, promptStepKeyboard } from "./keyboards.js";
+import { confirmUnlinkKeyboard, connectWalletKeyboard, dmActionKeyboard, poolAppKeyboard, promptStepKeyboard } from "./keyboards.js";
 import { formatMyStatus, formatPoolAnalytics, formatPortfolio } from "./poolCommands.js";
 import {
   getFlow,
@@ -60,9 +60,20 @@ async function askField(deps: BotDependencies, ctx: Context, flow: PromptFlow, p
   );
 }
 
+// Prompt flows that are self-scoped or read-only and so are fine to run in a DM.
+// Every other flow acts on the group's shared Safe/pool, so starting it in a DM only
+// wastes the user's time (they fill the whole prompt, then it fails at the final step).
+const DM_ALLOWED_FLOWS = new Set(["link_start", "proposal", "safe_status"]);
+
 export async function startPromptFlow(deps: BotDependencies, ctx: Context, command: string): Promise<void> {
   const flow = getFlow(command);
   if (flow === undefined) {
+    return;
+  }
+  if (ctx.chat?.type === "private" && !DM_ALLOWED_FLOWS.has(command)) {
+    await ctx.reply(
+      "That action runs on your group's shared Safe and pool — open it inside your trading group. (You can generate or link a wallet here in the DM.)"
+    );
     return;
   }
   const chatId = requireChatId(ctx.chat?.id);
@@ -274,12 +285,16 @@ export async function handleMenuSelection(deps: BotDependencies, ctx: Context, c
     case "pool_init": {
       const chatId = requireChatId(ctx.chat?.id);
       await requireGroupAdmin(ctx, chatId);
-      await ctx.reply(formatPoolAnalytics(await deps.poolService.initializePool(chatId, requireTelegramUserId(ctx.from?.id))));
+      await ctx.reply(formatPoolAnalytics(await deps.poolService.initializePool(chatId, requireTelegramUserId(ctx.from?.id))), {
+        reply_markup: poolAppKeyboard(chatId, deps.config.publicBaseUrl)
+      });
       return;
     }
     case "pool": {
       const chatId = requireChatId(ctx.chat?.id);
-      await ctx.reply(formatPoolAnalytics(await deps.poolService.getAnalytics(chatId, requireTelegramUserId(ctx.from?.id))));
+      await ctx.reply(formatPoolAnalytics(await deps.poolService.getAnalytics(chatId, requireTelegramUserId(ctx.from?.id))), {
+        reply_markup: poolAppKeyboard(chatId, deps.config.publicBaseUrl)
+      });
       return;
     }
     case "my_status": {

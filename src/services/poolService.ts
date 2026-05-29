@@ -17,6 +17,7 @@ import type { PoolRepository } from "../storage/poolRepository.js";
 import { createId } from "../utils/ids.js";
 import { calculateDepositShares, calculateWithdrawalQuote } from "./poolAccounting.js";
 import { buildPoolAnalytics, subtractReserved, sumReservedWithdrawals, sumShares } from "./poolAnalyticsBuilder.js";
+import { KeyedMutex } from "./keyedMutex.js";
 
 export type PortfolioEntry = {
   chatId: ChatId;
@@ -44,6 +45,10 @@ export type PlatformStats = {
 };
 
 export class PoolService {
+  // Serializes financial mutations per chat so check-then-act sequences (e.g. a
+  // manual /deposit racing the deposit watcher on the same tx hash) can't interleave.
+  private readonly locks = new KeyedMutex();
+
   constructor(private readonly repository: Repository, private readonly poolRepository: PoolRepository, private readonly withdrawalFeeBps: number) {}
 
   async initializePool(chatId: ChatId, ownerTelegramId: string): Promise<PoolAnalytics> {
@@ -78,6 +83,16 @@ export class PoolService {
   }
 
   async updateNav(input: {
+    chatId: ChatId;
+    operatorTelegramId: string;
+    navWei: bigint;
+    liquidWei: bigint;
+    positionsWei: bigint;
+  }): Promise<PoolAnalytics> {
+    return this.locks.run(input.chatId, () => this.updateNavLocked(input));
+  }
+
+  private async updateNavLocked(input: {
     chatId: ChatId;
     operatorTelegramId: string;
     navWei: bigint;
@@ -161,6 +176,15 @@ export class PoolService {
     amountWei: bigint;
     transactionHash: Hex;
   }): Promise<PoolAnalytics> {
+    return this.locks.run(input.chatId, () => this.creditDepositLocked(input));
+  }
+
+  private async creditDepositLocked(input: {
+    chatId: ChatId;
+    telegramUserId: string;
+    amountWei: bigint;
+    transactionHash: Hex;
+  }): Promise<PoolAnalytics> {
     await this.requireGroupWallet(input.chatId);
     const duplicate = await this.poolRepository.getPoolLedgerEntryByTransactionHash(input.transactionHash);
     if (duplicate !== null) {
@@ -218,6 +242,15 @@ export class PoolService {
     recipientAddress: Address;
     withdrawalBps: number;
   }): Promise<PoolWithdrawalRequest> {
+    return this.locks.run(input.chatId, () => this.requestWithdrawalLocked(input));
+  }
+
+  private async requestWithdrawalLocked(input: {
+    chatId: ChatId;
+    telegramUserId: string;
+    recipientAddress: Address;
+    withdrawalBps: number;
+  }): Promise<PoolWithdrawalRequest> {
     const member = await this.requireMember(input.chatId, input.telegramUserId);
     const snapshot = await this.requireSnapshot(input.chatId);
     const totalShares = await this.getTotalShares(input.chatId);
@@ -268,6 +301,10 @@ export class PoolService {
   }
 
   async cancelWithdrawal(chatId: ChatId, requestId: string, telegramUserId: string): Promise<PoolWithdrawalRequest> {
+    return this.locks.run(chatId, () => this.cancelWithdrawalLocked(chatId, requestId, telegramUserId));
+  }
+
+  private async cancelWithdrawalLocked(chatId: ChatId, requestId: string, telegramUserId: string): Promise<PoolWithdrawalRequest> {
     const request = await this.requireWithdrawal(chatId, requestId);
     if (request.status !== "queued") {
       throw new UserInputError("Only a queued withdrawal can be cancelled", { requestId, status: request.status });

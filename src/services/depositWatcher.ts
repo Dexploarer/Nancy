@@ -51,6 +51,9 @@ export async function matchBlockDeposits(
 export class DepositWatcher {
   private readonly publicClient: PublicClient;
   private lastScannedBlock = 0n;
+  // Only credit deposits this many blocks behind the head, so a shallow BSC re-org
+  // can't leave us having credited a tx that later drops off the canonical chain.
+  private readonly confirmations = 5n;
   private running = false;
   private timer: ReturnType<typeof setInterval> | undefined;
 
@@ -96,26 +99,28 @@ export class DepositWatcher {
       }
       const safeToChatId = new Map(wallets.map((wallet) => [wallet.safeAddress.toLowerCase(), wallet.chatId]));
       const head = await this.publicClient.getBlockNumber();
+      // Treat the tip minus a confirmation lag as the scannable head (re-org safety).
+      const confirmedHead = head > this.confirmations ? head - this.confirmations : 0n;
       if (this.lastScannedBlock === 0n) {
-        // Start from the current head — only auto-detect deposits made from now on.
-        this.lastScannedBlock = head;
+        // Start from the current confirmed head — only auto-detect deposits from now on.
+        this.lastScannedBlock = confirmedHead;
         return;
       }
-      if (head <= this.lastScannedBlock) {
+      if (confirmedHead <= this.lastScannedBlock) {
         return;
       }
       let from = this.lastScannedBlock + 1n;
-      if (head - from + 1n > BigInt(this.maxBlocksPerTick)) {
+      if (confirmedHead - from + 1n > BigInt(this.maxBlocksPerTick)) {
         // Fell too far behind (downtime / RPC stall): skip the gap so we never scan
         // unbounded history — but log it loudly, since deposits in the gap are missed.
         Logger.warn("[DepositWatcher] behind chain head — skipping blocks (deposits in the gap won't be auto-credited)", {
           from: from.toString(),
-          head: head.toString(),
-          skipped: (head - from + 1n - BigInt(this.maxBlocksPerTick)).toString()
+          head: confirmedHead.toString(),
+          skipped: (confirmedHead - from + 1n - BigInt(this.maxBlocksPerTick)).toString()
         });
-        from = head - BigInt(this.maxBlocksPerTick) + 1n;
+        from = confirmedHead - BigInt(this.maxBlocksPerTick) + 1n;
       }
-      for (let blockNumber = from; blockNumber <= head; blockNumber++) {
+      for (let blockNumber = from; blockNumber <= confirmedHead; blockNumber++) {
         const block = await this.publicClient.getBlock({ blockNumber, includeTransactions: true });
         const transactions: ScannedTx[] = block.transactions.map((tx) => ({
           hash: tx.hash,

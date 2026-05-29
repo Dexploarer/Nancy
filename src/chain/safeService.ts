@@ -204,12 +204,20 @@ export class SafeService {
     if (decoded.functionName !== "execTransaction") {
       throw new UserInputError("Transaction is not a Safe execution");
     }
-    const args = decoded.args as readonly [Address, bigint, Hex, number, ...unknown[]];
+    // Match every execTransaction action field (not just to/value/data/operation) so a
+    // tx with the same target but different gas economics (e.g. a non-zero refundReceiver
+    // skimming a refund) can never pass verification.
+    const args = decoded.args as readonly [Address, bigint, Hex, number, bigint, bigint, bigint, Address, Address, ...unknown[]];
     if (
       args[0].toLowerCase() !== safeTransaction.to.toLowerCase() ||
       args[1] !== safeTransaction.value ||
       args[2].toLowerCase() !== safeTransaction.data.toLowerCase() ||
-      args[3] !== safeTransaction.operation
+      args[3] !== safeTransaction.operation ||
+      args[4] !== safeTransaction.safeTxGas ||
+      args[5] !== safeTransaction.baseGas ||
+      args[6] !== safeTransaction.gasPrice ||
+      args[7].toLowerCase() !== safeTransaction.gasToken.toLowerCase() ||
+      args[8].toLowerCase() !== safeTransaction.refundReceiver.toLowerCase()
     ) {
       throw new UserInputError("Execution does not match this Safe transaction");
     }
