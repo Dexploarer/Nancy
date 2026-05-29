@@ -453,6 +453,10 @@ export class PoolService {
   }
 
   async markWithdrawalPrepared(chatId: ChatId, requestId: string, safeSubmissionId: string): Promise<void> {
+    return this.locks.run(chatId, () => this.markWithdrawalPreparedLocked(chatId, requestId, safeSubmissionId));
+  }
+
+  private async markWithdrawalPreparedLocked(chatId: ChatId, requestId: string, safeSubmissionId: string): Promise<void> {
     const request = await this.requireWithdrawal(chatId, requestId);
     if (request.status !== "queued") {
       throw new UserInputError("Withdrawal request is not queued", { requestId, status: request.status });
@@ -466,6 +470,16 @@ export class PoolService {
   }
 
   async markWithdrawalExecuted(requestId: string, transactionHash: Hex): Promise<void> {
+    // Look up the chat only to pick the lock key; the locked body re-reads and
+    // re-checks status, so a stale read here can't cause a bad mutation.
+    const owning = await this.poolRepository.getPoolWithdrawalRequest(requestId);
+    if (owning === null) {
+      throw new UserInputError("Withdrawal request not found", { requestId });
+    }
+    return this.locks.run(owning.chatId, () => this.markWithdrawalExecutedLocked(requestId, transactionHash));
+  }
+
+  private async markWithdrawalExecutedLocked(requestId: string, transactionHash: Hex): Promise<void> {
     const request = await this.poolRepository.getPoolWithdrawalRequest(requestId);
     if (request === null) {
       throw new UserInputError("Withdrawal request not found", { requestId });
