@@ -13,6 +13,7 @@ import { renderExecutePage } from "./executePage.js";
 import { saltNonceForSession } from "../services/safeDeploymentService.js";
 import { notifyGroup } from "../services/notify.js";
 import { renderPoolPage } from "./poolPage.js";
+import { renderLandingPage } from "./landingPage.js";
 import { verifyTelegramInitData } from "./telegramInitData.js";
 import { serializePoolAnalytics } from "./poolAnalyticsResponse.js";
 import { configureTelegramBot } from "../bot/telegramCommands.js";
@@ -65,6 +66,9 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
   };
 
   async function dispatch(request: Request, url: URL): Promise<Response> {
+    if (request.method === "GET" && url.pathname === "/") {
+      return new Response(renderLandingPage(), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    }
     if (request.method === "GET" && url.pathname === "/health") {
       return Response.json({ ok: true });
     }
