@@ -16,9 +16,9 @@ function expectVerifiedSslWithPinnedCa(ssl: unknown): void {
 
 describe("buildPgPoolConfig", () => {
   it("does not enable SSL for a local host", () => {
-    const config = buildPgPoolConfig("postgresql://postgres:pw@localhost:5432/the_family");
+    const config = buildPgPoolConfig("postgresql://postgres:pw@localhost:5432/nancy");
     expect(config.ssl).toBeUndefined();
-    expect(config.connectionString).toBe("postgresql://postgres:pw@localhost:5432/the_family");
+    expect(config.connectionString).toBe("postgresql://postgres:pw@localhost:5432/nancy");
   });
 
   it("enables verified SSL with the Supabase CA pinned for a remote host", () => {

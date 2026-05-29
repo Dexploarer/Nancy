@@ -117,7 +117,7 @@ export class SafeService {
         contractTransactionHash: input.safeTxHash,
         sender: input.senderAddress,
         signature: input.senderSignature,
-        origin: "The Family Bot"
+        origin: "Nancy"
       })
     });
   }

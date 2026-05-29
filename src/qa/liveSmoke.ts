@@ -162,7 +162,7 @@ async function checkPublicHttp(input: AppConfig): Promise<void> {
     throw new AppError("Pool mini app page failed", { status: poolPage.status });
   }
   const html = await poolPage.text();
-  if (!html.includes("The Family Pool") || !html.includes("/api/pools/")) {
+  if (!html.includes("Nancy Pool") || !html.includes("/api/pools/")) {
     throw new AppError("Pool mini app page is missing analytics bindings");
   }
   pass("HTTP runtime", `${baseUrl}/health and /pool/live-smoke`);

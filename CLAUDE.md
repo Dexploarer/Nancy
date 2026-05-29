@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-"The Family Bot" (Nancy) is a Telegram bot for BSC group trading. Telegram groups link a Safe multisig wallet, pool native BNB into a share-based ledger, and create trade/launch proposals that become Safe transactions owners sign and execute. The bot never takes custody: it stores the accounting ledger and *prepares* Safe transactions; funds stay in the group Safe. There is no custom vault contract.
+Nancy is a Telegram bot for BSC group trading. Telegram groups link a Safe multisig wallet, pool native BNB into a share-based ledger, and create trade/launch proposals that become Safe transactions owners sign and execute. The bot never takes custody: it stores the accounting ledger and *prepares* Safe transactions; funds stay in the group Safe. There is no custom vault contract.
 
 ## Runtime & toolchain
 

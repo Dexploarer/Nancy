@@ -93,7 +93,7 @@ export class WalletLinkService {
 
 export function buildWalletLinkMessage(link: WalletLink): string {
   return [
-    "The Family wallet link",
+    "Nancy wallet link",
     `Telegram user: ${link.telegramUserId}`,
     `Wallet: ${link.address}`,
     `Nonce: ${link.nonce}`
