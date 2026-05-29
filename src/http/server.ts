@@ -1,4 +1,5 @@
 import { webhookCallback } from "grammy";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { App } from "../app.js";
 import type { AppConfig } from "../config.js";
@@ -16,6 +17,10 @@ import { verifyTelegramInitData } from "./telegramInitData.js";
 import { serializePoolAnalytics } from "./poolAnalyticsResponse.js";
 import { configureTelegramBot } from "../bot/telegramCommands.js";
 import { FixedWindowRateLimiter, clientKeyFromHeaders } from "./rateLimiter.js";
+import { setOgBaseUrl } from "./brand.js";
+
+// Bundled brand image served at /og-image.png for social-share previews.
+const OG_IMAGE_PATH = fileURLToPath(new URL("../../assets/nancy.png", import.meta.url));
 
 const SignaturePayloadSchema = z.object({
   telegramUserId: z.string().regex(/^\d+$/).optional(),
@@ -62,6 +67,12 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
   async function dispatch(request: Request, url: URL): Promise<Response> {
     if (request.method === "GET" && url.pathname === "/health") {
       return Response.json({ ok: true });
+    }
+    if (request.method === "GET" && url.pathname === "/og-image.png") {
+      // Brand image for social-share previews (og:image). Bundled in the repo/image.
+      return new Response(Bun.file(OG_IMAGE_PATH), {
+        headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" }
+      });
     }
     if (url.pathname.startsWith("/api/")) {
       // Per-client first so one throttled client short-circuits before touching the
@@ -143,6 +154,8 @@ async function withSecurityHeaders(result: Response | Promise<Response>): Promis
 }
 
 export async function startHttpRuntime(appState: App, config: AppConfig): Promise<void> {
+  // Fill the absolute og:image URL for social-share tags (no-op if no public URL).
+  setOgBaseUrl(config.publicBaseUrl);
   await configureTelegramBot(appState.bot);
   Logger.info("[HttpRuntime] Telegram commands configured");
 

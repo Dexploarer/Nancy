@@ -1,5 +1,5 @@
 import { walletProviderScript } from "./walletProviderScript.js";
-import { BRAND_HEAD } from "./brand.js";
+import { brandHead } from "./brand.js";
 
 // Execute-from-your-wallet page. The server hands the wallet the exact
 // execTransaction calldata (with the owners' collected signatures); the connected
@@ -19,7 +19,7 @@ export function renderExecutePage(input: {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  ${BRAND_HEAD}
+  ${brandHead()}
   <title>Nancy Safe Execute</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
