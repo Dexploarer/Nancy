@@ -159,14 +159,43 @@ export async function startHttpRuntime(appState: App, config: AppConfig): Promis
 
   if (config.publicBaseUrl !== undefined && config.telegramWebhookSecret !== undefined) {
     const webhookUrl = `${config.publicBaseUrl.replace(/\/$/, "")}/telegram/${config.telegramWebhookSecret}`;
-    await appState.bot.api.setWebhook(webhookUrl);
-    Logger.info("[HttpRuntime] Telegram webhook configured", { webhookUrl });
+    // Non-fatal + retried: on a fresh deploy the app's own host may not resolve yet
+    // (its DNS goes live only once the deploy is healthy), and a thrown setWebhook
+    // would crash startup → the deploy never gets healthy → the host never resolves.
+    // That deadlock is exactly what bricked the first DigitalOcean deploys.
+    void registerWebhookWithRetry(appState.bot, webhookUrl);
     return;
   }
 
   await appState.bot.api.deleteWebhook();
   Logger.info("[HttpRuntime] Telegram webhook cleared for local polling");
   await appState.bot.start();
+}
+
+// Register the Telegram webhook with backoff. A fresh PaaS host often isn't
+// resolvable by Telegram until the deploy is healthy and DNS propagates, so a
+// single setWebhook can fail; retrying without crashing lets it succeed once live.
+async function registerWebhookWithRetry(bot: App["bot"], webhookUrl: string): Promise<void> {
+  // A brand-new PaaS host can be negatively-cached by Telegram's DNS for many
+  // minutes (it remembers the NXDOMAIN from before the deploy went live), so retry
+  // well past that window — ramp to 60s, then steady ~60s for ~35 min total.
+  const maxAttempts = 40;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(60_000, 5_000 * attempt)));
+    }
+    try {
+      await bot.api.setWebhook(webhookUrl);
+      Logger.info("[HttpRuntime] Telegram webhook configured", { webhookUrl, attempt: attempt + 1 });
+      return;
+    } catch (error) {
+      Logger.warn("[HttpRuntime] setWebhook failed; retrying", {
+        attempt: attempt + 1,
+        err: error instanceof Error ? error : undefined
+      });
+    }
+  }
+  Logger.error("[HttpRuntime] setWebhook gave up — updates won't arrive until the next deploy", { webhookUrl });
 }
 
 async function renderSafeSigningPage(appState: App, pathname: string, walletConnectProjectId?: string, chainId?: number): Promise<Response> {
