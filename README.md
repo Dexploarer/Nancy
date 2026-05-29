@@ -1,6 +1,12 @@
 # NANCY
 
+<p align="center">
+  <img src="assets/nancy.png" alt="Nancy, the Golden Girl of Binance" width="320" />
+</p>
+
 Nancy, the Golden Girl of Binance — a production Telegram bot for BSC group trading wallets and Flap token launches.
+
+**New here?** Group admins and members should start with the **[Nancy Guide](docs/guide.md)** — a step-by-step walkthrough from creating a group Safe to depositing, trading, and withdrawing.
 
 ## Capabilities
 
