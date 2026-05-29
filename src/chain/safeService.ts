@@ -1,6 +1,8 @@
 import {
   createPublicClient,
   createWalletClient,
+  decodeFunctionData,
+  encodeFunctionData,
   http,
   type Address,
   type Hex,
@@ -163,6 +165,54 @@ export class SafeService {
         signatures
       ]
     });
+  }
+
+  // Pure: the execTransaction calldata an owner sends from their own wallet
+  // (execute-from-wallet). No executor key needed — the signatures are the
+  // owners' collected confirmations.
+  buildExecTransactionCalldata(safeTransaction: SafeTransactionData, confirmations: SafeConfirmation[]): Hex {
+    return encodeFunctionData({
+      abi: safeAbi,
+      functionName: "execTransaction",
+      args: [
+        safeTransaction.to,
+        safeTransaction.value,
+        safeTransaction.data,
+        safeTransaction.operation,
+        safeTransaction.safeTxGas,
+        safeTransaction.baseGas,
+        safeTransaction.gasPrice,
+        safeTransaction.gasToken,
+        safeTransaction.refundReceiver,
+        buildSignatureBytes(confirmations)
+      ]
+    });
+  }
+
+  // Verify a Safe tx an owner executed from their wallet: the mined tx must be a
+  // successful execTransaction to this Safe whose action matches the submission.
+  async verifyExecution(safeAddress: Address, safeTransaction: SafeTransactionData, transactionHash: Hex): Promise<void> {
+    const receipt = await this.publicClient.waitForTransactionReceipt({ hash: transactionHash, timeout: 60_000 });
+    if (receipt.status !== "success") {
+      throw new UserInputError("Execution transaction failed on-chain");
+    }
+    const transaction = await this.publicClient.getTransaction({ hash: transactionHash });
+    if (transaction.to === null || transaction.to.toLowerCase() !== safeAddress.toLowerCase()) {
+      throw new UserInputError("Execution transaction was not sent to the group Safe");
+    }
+    const decoded = decodeFunctionData({ abi: safeAbi, data: transaction.input });
+    if (decoded.functionName !== "execTransaction") {
+      throw new UserInputError("Transaction is not a Safe execution");
+    }
+    const args = decoded.args as readonly [Address, bigint, Hex, number, ...unknown[]];
+    if (
+      args[0].toLowerCase() !== safeTransaction.to.toLowerCase() ||
+      args[1] !== safeTransaction.value ||
+      args[2].toLowerCase() !== safeTransaction.data.toLowerCase() ||
+      args[3] !== safeTransaction.operation
+    ) {
+      throw new UserInputError("Execution does not match this Safe transaction");
+    }
   }
 
   static buildSafeTransactionData(

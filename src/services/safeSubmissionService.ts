@@ -114,6 +114,34 @@ export class SafeSubmissionService {
     return transactionHash;
   }
 
+  // Execute-from-wallet: calldata for an owner to send execTransaction themselves.
+  async buildExecution(submissionId: string): Promise<{ safeAddress: Address; data: Hex }> {
+    const submission = await this.getSubmissionOrThrow(submissionId);
+    const wallet = await this.repository.getGroupWallet(submission.chatId);
+    if (wallet === null) {
+      throw new UserInputError("Group wallet not found for Safe submission");
+    }
+    const status = await this.safeService.getTransaction(submission.transactionServiceUrl, submission.safeTxHash);
+    const confirmations = extractConfirmations(status);
+    if (confirmations.length < wallet.threshold) {
+      throw new UserInputError(`Need ${wallet.threshold} owner signatures before executing (have ${confirmations.length}).`);
+    }
+    return {
+      safeAddress: submission.safeAddress,
+      data: this.safeService.buildExecTransactionCalldata(submission.safeTransaction, confirmations)
+    };
+  }
+
+  // Verify an owner-submitted execution on-chain, then finalize pool accounting.
+  async finalizeExecution(submissionId: string, transactionHash: Hex): Promise<Hex> {
+    const submission = await this.getSubmissionOrThrow(submissionId);
+    await this.safeService.verifyExecution(submission.safeAddress, submission.safeTransaction, transactionHash);
+    if (submission.sourceType === "withdrawal") {
+      await this.poolService.markWithdrawalExecuted(submission.sourceId, transactionHash);
+    }
+    return transactionHash;
+  }
+
   async getSubmission(submissionId: string): Promise<SafeSubmission | null> {
     return this.repository.getSafeSubmission(submissionId);
   }

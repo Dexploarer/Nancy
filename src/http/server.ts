@@ -8,6 +8,7 @@ import { parseAddress, parseHex } from "../utils/evm.js";
 import { renderSigningPage } from "./signingPage.js";
 import { renderLinkPage, renderLinkStartPage } from "./linkPage.js";
 import { renderDeployPage } from "./deployPage.js";
+import { renderExecutePage } from "./executePage.js";
 import { saltNonceForSession } from "../services/safeDeploymentService.js";
 import { notifyGroup } from "../services/notify.js";
 import { renderPoolPage } from "./poolPage.js";
@@ -63,6 +64,9 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
     if (request.method === "GET" && url.pathname.startsWith("/deploy/")) {
       return route(async () => renderDeploySafePage(appState, config, url.pathname));
     }
+    if (request.method === "GET" && url.pathname.startsWith("/execute/")) {
+      return route(async () => renderExecuteSafePage(appState, config, url.pathname));
+    }
     if (request.method === "GET" && url.pathname.startsWith("/pool/")) {
       return route(async () => renderPoolAnalyticsPage(url.pathname));
     }
@@ -80,6 +84,9 @@ export function createFetchHandler(appState: App, config: AppConfig): (request: 
     }
     if (request.method === "POST" && url.pathname.startsWith("/api/safe-deployments/")) {
       return route(async () => submitSafeDeployment(appState, config, request, url.pathname));
+    }
+    if (request.method === "POST" && url.pathname.startsWith("/api/safe-executions/")) {
+      return route(async () => submitSafeExecution(appState, request, url.pathname));
     }
     if (request.method === "POST" && webhookPath !== undefined && url.pathname === webhookPath && webhookHandler !== undefined) {
       return webhookHandler(request);
@@ -191,6 +198,37 @@ async function submitSafeDeployment(appState: App, _config: AppConfig, request: 
   const result = await appState.safeGroupSetupService.finalizeDeployment(sessionId, safeAddress, transactionHash);
   await notifyGroup(appState.bot, result.wallet.chatId, `✅ Group Safe deployed and linked: ${result.wallet.safeAddress}`);
   return Response.json({ safeAddress: result.wallet.safeAddress });
+}
+
+async function renderExecuteSafePage(appState: App, config: AppConfig, pathname: string): Promise<Response> {
+  const submissionId = requiredPathSuffix(pathname, "/execute/");
+  const { safeAddress, data } = await appState.safeSubmissionService.buildExecution(submissionId);
+  return new Response(
+    renderExecutePage({
+      submissionId,
+      safeAddress,
+      data,
+      ...(config.walletConnectProjectId === undefined ? {} : { walletConnectProjectId: config.walletConnectProjectId }),
+      chainId: config.bscChainId
+    }),
+    { headers: { "Content-Type": "text/html; charset=utf-8" } }
+  );
+}
+
+// Verify an owner-submitted execution (no key, no identity needed — the on-chain
+// match is the security), then finalize and tell the group.
+async function submitSafeExecution(appState: App, request: Request, pathname: string): Promise<Response> {
+  const submissionId = requiredPathSuffix(pathname, "/api/safe-executions/");
+  const payload = await parseSafeDeploymentBody(request);
+  const transactionHash = await appState.safeSubmissionService.finalizeExecution(
+    submissionId,
+    parseHex(payload.transactionHash, "transactionHash")
+  );
+  const submission = await appState.safeSubmissionService.getSubmission(submissionId);
+  if (submission !== null) {
+    await notifyGroup(appState.bot, submission.chatId, `✅ Safe tx ${submission.id} executed on-chain: ${transactionHash}`);
+  }
+  return Response.json({ transactionHash });
 }
 
 async function renderPoolAnalyticsPage(pathname: string): Promise<Response> {

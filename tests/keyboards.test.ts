@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   connectWalletKeyboard,
   deployPageKeyboard,
+  executePageKeyboard,
   flapLaunchKeyboard,
   linkPageKeyboard,
   poolAppKeyboard,
@@ -72,6 +73,11 @@ describe("page-open keyboards", () => {
   it("deploy button points at the deploy page for the session", () => {
     const b = buttons(deployPageKeyboard("setup_1", "https://x.test", false))[0]!;
     expect(b.url).toBe("https://x.test/deploy/setup_1");
+  });
+
+  it("execute button points at the execute page for the submission", () => {
+    const b = buttons(executePageKeyboard("safe_1", "https://x.test", false))[0]!;
+    expect(b.url).toBe("https://x.test/execute/safe_1");
   });
 });
 

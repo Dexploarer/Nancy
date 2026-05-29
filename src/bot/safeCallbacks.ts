@@ -2,7 +2,7 @@ import type { Bot, Context } from "grammy";
 import { AppError, UserInputError } from "../domain/errors.js";
 import { Logger } from "../logger.js";
 import { formatGeneratedWallet, formatSafeCreationSession, formatSafeStatus, formatSafeSubmission } from "./formatters.js";
-import { deployPageKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
+import { deployPageKeyboard, executePageKeyboard, safeGroupKeyboard, safeSubmissionKeyboard } from "./keyboards.js";
 import { requireChatId, requireGroupAdmin, requireTelegramUserId } from "./commandUtils.js";
 import type { BotDependencies } from "./bot.js";
 
@@ -110,11 +110,12 @@ export function registerSafeCallbacks(bot: Bot, dependencies: BotDependencies): 
 
   bot.callbackQuery(/^safe_execute:/, async (ctx) => {
     await handleCallback(ctx, async () => {
-      const chatId = requireChatId(ctx.chat?.id);
-      await requireGroupAdmin(ctx, chatId);
-      const txHash = await dependencies.safeSubmissionService.execute(ctx.callbackQuery.data.slice("safe_execute:".length));
-      await ctx.answerCallbackQuery({ text: "Execution submitted" });
-      await ctx.reply(`Safe execution submitted: ${txHash}`);
+      const submissionId = ctx.callbackQuery.data.slice("safe_execute:".length);
+      await ctx.answerCallbackQuery();
+      await ctx.reply(
+        "Enough owners signed. Tap below to execute from your own wallet — you pay the gas, the bot holds no key.",
+        { reply_markup: executePageKeyboard(submissionId, dependencies.config.publicBaseUrl, ctx.chat?.type === "private") }
+      );
     });
   });
 

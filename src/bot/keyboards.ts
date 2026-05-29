@@ -113,6 +113,11 @@ export function deployPageKeyboard(sessionId: string, publicBaseUrl: string | un
   return pageOpenButton("Connect & deploy Safe", `${baseUrl(publicBaseUrl)}/deploy/${encodeURIComponent(sessionId)}`, preferWebApp);
 }
 
+// Execute-from-your-wallet: opens the page where an owner sends execTransaction themselves.
+export function executePageKeyboard(submissionId: string, publicBaseUrl: string | undefined, preferWebApp: boolean): InlineKeyboard {
+  return pageOpenButton("Connect & execute", `${baseUrl(publicBaseUrl)}/execute/${encodeURIComponent(submissionId)}`, preferWebApp);
+}
+
 export function poolAppKeyboard(chatId: string, publicBaseUrl?: string): InlineKeyboard {
   const url = `${publicBaseUrl?.replace(/\/$/, "") ?? "http://localhost:3000"}/pool/${encodeURIComponent(chatId)}`;
   return new InlineKeyboard().webApp("Open analytics", url).url("Open in browser", url);
