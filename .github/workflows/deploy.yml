@@ -1,0 +1,35 @@
+name: deploy
+
+# Push-to-deploy, driven entirely from GitHub (no DO dashboard GitHub connection):
+# on push to the deploy branch, run the gate, build the image on a native amd64
+# runner, push it to the DigitalOcean Container Registry, and trigger an App
+# Platform deployment.
+#
+# Requires one repository secret: DIGITALOCEAN_ACCESS_TOKEN
+#   (GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret)
+on:
+  push:
+    branches: [lazy-ux-phase1]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # NOTE: actions pinned to major tags for readability; pin to full commit
+      # SHAs for stricter supply-chain integrity (a workflow secret is in scope).
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run verify
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - run: doctl registry login --expiry-seconds 1200
+      - run: docker build -t registry.digitalocean.com/nancy-bsc-bot/nancy:latest .
+      - run: docker push registry.digitalocean.com/nancy-bsc-bot/nancy:latest
+      - run: doctl apps create-deployment 7d649227-9d40-4b4a-8ae3-62d0a14eea53 --wait
