@@ -8,7 +8,7 @@ export function walletProviderScript(walletConnectProjectId?: string, chainId = 
     ? `const { EthereumProvider } = await import("https://esm.sh/@walletconnect/ethereum-provider@2");
       wcProvider = await EthereumProvider.init({
         projectId: WC_PROJECT_ID,
-        chains: [${chainId}],
+        optionalChains: [${chainId}],
         showQrModal: true,
         methods: ["eth_requestAccounts", "personal_sign"],
         events: ["accountsChanged", "chainChanged"]

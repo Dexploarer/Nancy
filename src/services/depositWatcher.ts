@@ -60,7 +60,9 @@ export class DepositWatcher {
     private readonly notify: (chatId: string, text: string) => Promise<void>,
     rpcUrl: string,
     chainId: 56 | 97,
-    private readonly maxBlocksPerTick = 25,
+    // BSC is ~0.45s/block post-Fermi (~2.2 blocks/s), so a 30s tick is ~66 blocks.
+    // Keep generous headroom so a normal tick never hits the skip backstop below.
+    private readonly maxBlocksPerTick = 300,
     publicClient?: PublicClient
   ) {
     this.publicClient =
@@ -104,6 +106,13 @@ export class DepositWatcher {
       }
       let from = this.lastScannedBlock + 1n;
       if (head - from + 1n > BigInt(this.maxBlocksPerTick)) {
+        // Fell too far behind (downtime / RPC stall): skip the gap so we never scan
+        // unbounded history — but log it loudly, since deposits in the gap are missed.
+        Logger.warn("[DepositWatcher] behind chain head — skipping blocks (deposits in the gap won't be auto-credited)", {
+          from: from.toString(),
+          head: head.toString(),
+          skipped: (head - from + 1n - BigInt(this.maxBlocksPerTick)).toString()
+        });
         from = head - BigInt(this.maxBlocksPerTick) + 1n;
       }
       for (let blockNumber = from; blockNumber <= head; blockNumber++) {
