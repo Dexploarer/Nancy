@@ -40,6 +40,21 @@ export class PancakeSwapService {
     return outputAmount;
   }
 
+  async quoteTokenSell(tokenAddress: Address, inputAmountWei: bigint): Promise<bigint> {
+    this.assertConfigured();
+    const amounts = await this.publicClient.readContract({
+      address: this.addresses.pancakeV2Router,
+      abi: pancakeV2RouterAbi,
+      functionName: "getAmountsOut",
+      args: [inputAmountWei, [tokenAddress, this.addresses.wbnb]]
+    });
+    const outputAmount = amounts.at(-1);
+    if (outputAmount === undefined || outputAmount <= 0n) {
+      throw new UserInputError("PancakeSwap V2 quote returned no output");
+    }
+    return outputAmount;
+  }
+
   buildNativeBuyTransaction(
     tokenAddress: Address,
     inputAmountWei: bigint,
