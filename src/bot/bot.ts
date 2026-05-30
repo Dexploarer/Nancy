@@ -441,7 +441,7 @@ export function createBot(dependencies: BotDependencies): Bot {
           }
           const languages = normalizeLanguages((await dependencies.repository.getGroupLanguages(chatId)) ?? []);
           const explanation = await dependencies.explanationService.explain(entry, languages);
-          const voiceAvailable = dependencies.voiceService !== undefined && voiceSupported(languages[0] ?? "en");
+          const voiceAvailable = dependencies.voiceService !== undefined; // always offer voice; unsupported langs fall back to an English voice
           await ctx.editMessageText(formatWatchlistEntry(entry, explanation), {
             parse_mode: "Markdown",
             reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass", voiceAvailable)
@@ -494,10 +494,9 @@ export function createBot(dependencies: BotDependencies): Bot {
       }
       const languages = normalizeLanguages((await dependencies.repository.getGroupLanguages(chatId)) ?? []);
       const primary = languages[0] ?? "en";
-      if (!voiceSupported(primary)) {
-        await ctx.answerCallbackQuery({ text: "Voice isn't available for that language yet.", show_alert: true });
-        return;
-      }
+      // Kokoro can't speak every language; for an unsupported one, voice an English
+      // take so the button still works (the written take stays in the group's language).
+      const voiceLang = voiceSupported(primary) ? primary : "en";
       await ctx.answerCallbackQuery({ text: "🔊 Recording Nancy's take…" });
       void (async () => {
         try {
@@ -505,15 +504,18 @@ export function createBot(dependencies: BotDependencies): Bot {
           const list = await dependencies.watchlistService.getList(Number(chatId), treasuryBnb);
           const entry = list.find((e) => e.candidate.tokenAddress.toLowerCase() === tokenAddress.toLowerCase());
           if (entry === undefined) return;
-          const take = await dependencies.explanationService.explain(entry, [primary]);
+          const take = await dependencies.explanationService.explain(entry, [voiceLang]);
           const spoken = take.replace(/[*_`\[\]#]/g, "");
-          const audio = await dependencies.voiceService!.synthesize(spoken, primary);
+          const audio = await dependencies.voiceService!.synthesize(spoken, voiceLang);
           if (audio === null) {
             await ctx.reply("Couldn't record that one — try again in a moment.");
             return;
           }
           await ctx.replyWithVoice(new InputFile(audio, "nancy.ogg"), {
-            caption: `🔊 Nancy on ${entry.candidate.tokenSymbol}`,
+            caption:
+              voiceLang === primary
+                ? `🔊 Nancy on ${entry.candidate.tokenSymbol}`
+                : `🔊 Nancy on ${entry.candidate.tokenSymbol} (English voice — no ${primary} voice yet)`,
             // Re-open the options under the voice note so the user can act once she's done speaking.
             reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass", true)
           });
