@@ -24,4 +24,10 @@ describe("watchlistView", () => {
     expect(text).toContain("FOO explanation");
     expect(text).toContain("0x1111111111111111111111111111111111111111");
   });
+
+  it("strips markdown-significant characters from the symbol and the explanation", () => {
+    const text = formatWatchlistEntry(entry({ candidate: { ...entry().candidate, tokenSymbol: "FO*O" } }), "ape [now]_*`");
+    expect(text).toContain("*FOO*");   // symbol sanitized inside its bold span
+    expect(text).toContain("ape now"); // explanation sanitized (brackets/underscore/asterisk/backtick removed)
+  });
 });

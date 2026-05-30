@@ -45,7 +45,8 @@ export class WatchlistService {
         ...(riskReport.sellTaxBps === undefined ? {} : { sellTaxBps: riskReport.sellTaxBps }),
         ...(riskReport.lpLockedPercent === undefined ? {} : { lpLockedPercent: riskReport.lpLockedPercent }),
         ...(riskReport.lpHolderTopPercent === undefined ? {} : { lpHolderTopPercent: riskReport.lpHolderTopPercent }),
-        ...(riskReport.level === "unknown" ? { safetyUnknown: true } : {})
+        ...(riskReport.level === "unknown" ? { safetyUnknown: true } : {}),
+        ...(riskReport.reasons.some((r) => r.toLowerCase().includes("open-source")) ? { isOpenSource: false } : {})
       },
       this.config.thresholds
     );
