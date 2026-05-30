@@ -102,6 +102,11 @@ export type TokenRiskReport = {
   pairUrl?: string;
   buyTaxBps?: number;
   sellTaxBps?: number;
+  lpLocked?: boolean;
+  lpLockedPercent?: number;     // 0–100, locked + burned share of LP
+  lpHolderTopPercent?: number;  // 0–100, largest single LP holder (excl. lock/burn)
+  lpHolderCount?: number;
+  holderCount?: number;
   checkedAt: Date;
 };
 
@@ -247,4 +252,36 @@ export type PoolAnalytics = {
   withdrawals: PoolWithdrawalRequest[];
   ledger: PoolLedgerEntry[];
   capturedAt: Date;
+};
+
+export type TrendingCandidate = {
+  rank: number;
+  tokenAddress: Address;
+  tokenSymbol: string;
+  poolAddress: Address;
+  dexId: string;
+  momentumScore: number; // elizaOK score 0–100
+  conviction: string;
+  thesis: string[];
+  risks: string[];
+  fdvUsd?: number;
+  reserveUsd?: number;
+  volumeUsdH1?: number;
+  priceChangeH1?: number;
+  poolAgeMinutes?: number;
+};
+
+export type ExitSafetyGate = "pass" | "warn" | "block";
+export type ExitSafetyGrade = "A" | "B" | "C" | "D" | "F";
+
+export type WatchlistEntry = {
+  candidate: TrendingCandidate;
+  riskReport: TokenRiskReport;
+  roundTripLossBps?: number; // combined enter+exit cost at treasury size; undefined = unknown
+  liquidityUsd?: number;
+  treasurySizeBnb: number;
+  score: number; // 0–100 (higher = safer to enter/exit)
+  grade: ExitSafetyGrade;
+  gate: ExitSafetyGate;
+  reasons: string[];
 };
