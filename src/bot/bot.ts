@@ -27,7 +27,8 @@ import { PoolService } from "../services/poolService.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
 import type { WatchlistService } from "../services/watchlistService.js";
 import type { ExplanationService } from "../services/explanationService.js";
-import { flapLaunchKeyboard, helpText, linkPageKeyboard, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard, tradeProposalKeyboard } from "./keyboards.js";
+import { flapLaunchKeyboard, helpText, linkPageKeyboard, mainMenuKeyboard, nancyDetailKeyboard, nancyListKeyboard, safeGroupKeyboard, safeSubmissionKeyboard, tradeProposalKeyboard } from "./keyboards.js";
+import { formatWatchlist, formatWatchlistEntry } from "./watchlistView.js";
 import { registerSafeCallbacks } from "./safeCallbacks.js";
 import { registerPoolCommands } from "./poolCommands.js";
 import { createId } from "../utils/ids.js";
@@ -242,6 +243,19 @@ export function createBot(dependencies: BotDependencies): Bot {
     });
   });
 
+  bot.command("nancy", async (ctx) => {
+    await handleUserCommand(ctx, "nancy", async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const treasuryBnb = await groupTreasuryBnb(dependencies, chatId, fromId);
+      const list = await dependencies.watchlistService.getList(Number(chatId), treasuryBnb);
+      await ctx.reply(formatWatchlist(list, treasuryBnb ?? dependencies.config.watchlistDefaultSizeBnb), {
+        parse_mode: "Markdown",
+        reply_markup: nancyListKeyboard(list)
+      });
+    });
+  });
+
   bot.command("proposal", async (ctx) => {
     await handleUserCommand(ctx, "proposal", async () => {
       const parts = splitCommand(ctx.message?.text, 2);
@@ -377,6 +391,50 @@ export function createBot(dependencies: BotDependencies): Bot {
     });
   });
 
+  bot.callbackQuery("nancy_list", async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const treasuryBnb = await groupTreasuryBnb(dependencies, chatId, fromId);
+      const list = await dependencies.watchlistService.getList(Number(chatId), treasuryBnb);
+      await ctx.editMessageText(formatWatchlist(list, treasuryBnb ?? dependencies.config.watchlistDefaultSizeBnb), {
+        parse_mode: "Markdown",
+        reply_markup: nancyListKeyboard(list)
+      });
+    });
+  });
+
+  bot.callbackQuery(/^nancy_detail:(.+)$/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const tokenAddress = String(ctx.match[1] ?? "");
+      const treasuryBnb = await groupTreasuryBnb(dependencies, chatId, fromId);
+      const list = await dependencies.watchlistService.getList(Number(chatId), treasuryBnb);
+      const entry = list.find((e) => e.candidate.tokenAddress.toLowerCase() === tokenAddress.toLowerCase());
+      if (entry === undefined) {
+        await ctx.answerCallbackQuery({ text: "That token rolled off the list — refreshing.", show_alert: false });
+        return;
+      }
+      const explanation = await dependencies.explanationService.explain(entry);
+      await ctx.editMessageText(formatWatchlistEntry(entry, explanation), {
+        parse_mode: "Markdown",
+        reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass")
+      });
+    });
+  });
+
+  bot.callbackQuery(/^nancy_buy:(.+)$/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const tokenAddress = String(ctx.match[1] ?? "");
+      await ctx.answerCallbackQuery();
+      await ctx.reply(
+        `To trade this, a trader runs:\n\`/buy ${tokenAddress} <bnbAmount>\`\n\nNancy re-checks risk, builds the Safe transaction, and the owners sign — she never moves funds herself.`,
+        { parse_mode: "Markdown" }
+      );
+    });
+  });
+
   bot.callbackQuery(/^help:/, async (ctx) => {
     await handleCallback(ctx, async () => {
       const data = ctx.callbackQuery.data;
@@ -427,6 +485,15 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   return bot;
+}
+
+async function groupTreasuryBnb(deps: BotDependencies, chatId: string, fromId: string): Promise<number | undefined> {
+  try {
+    const analytics = await deps.poolService.getAnalytics(chatId, fromId);
+    return Number(analytics.liquidWei) / 1e18;
+  } catch {
+    return undefined; // no pool yet or caller not a member -> use the default notional size
+  }
 }
 
 async function handleCallback(ctx: Context, action: () => Promise<void>): Promise<void> {

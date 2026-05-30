@@ -131,6 +131,21 @@ export function poolAppKeyboard(chatId: string, publicBaseUrl?: string): InlineK
   return new InlineKeyboard().webApp("Open analytics", url).url("Open in browser", url);
 }
 
+export function nancyListKeyboard(entries: { candidate: { tokenSymbol: string; tokenAddress: string } }[]): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  entries.slice(0, 10).forEach((e, i) => {
+    keyboard.text(`🔎 ${e.candidate.tokenSymbol}`, `nancy_detail:${e.candidate.tokenAddress}`);
+    if (i % 2 === 1) keyboard.row();
+  });
+  return keyboard;
+}
+
+export function nancyDetailKeyboard(tokenAddress: string, gatePassed: boolean): InlineKeyboard {
+  const keyboard = new InlineKeyboard().text("⬅️ Back to list", "nancy_list");
+  if (gatePassed) keyboard.text("Trade this", `nancy_buy:${tokenAddress}`);
+  return keyboard;
+}
+
 export function helpText(topic: string): string {
   if (topic === "safe_group") {
     return [
