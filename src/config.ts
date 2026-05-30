@@ -34,6 +34,8 @@ const EnvSchema = z
     ELIZA_MODEL_URL: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
     ELIZA_MODEL_NAME: z.string().min(1).default("eliza-1"),
     ELIZA_MODEL_API_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional()),
+    KOKORO_TTS_URL: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
+    KOKORO_TTS_API_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional()),
     WATCHLIST_MAX_TOKENS: z.coerce.number().int().min(1).max(50).default(10),
     WATCHLIST_CACHE_SECONDS: z.coerce.number().int().min(0).max(3600).default(60),
     WATCHLIST_DEFAULT_SIZE_BNB: z.coerce.number().min(0.0001).default(0.1),
@@ -81,6 +83,8 @@ export type AppConfig = {
   elizaModelUrl?: string;
   elizaModelName: string;
   elizaModelApiKey?: string;
+  kokoroTtsUrl?: string;
+  kokoroTtsApiKey?: string;
   watchlistMaxTokens: number;
   watchlistCacheSeconds: number;
   watchlistDefaultSizeBnb: number;
@@ -126,6 +130,8 @@ export function loadConfig(): AppConfig {
     ...(env.ELIZA_MODEL_URL === undefined ? {} : { elizaModelUrl: env.ELIZA_MODEL_URL }),
     elizaModelName: env.ELIZA_MODEL_NAME,
     ...(env.ELIZA_MODEL_API_KEY === undefined ? {} : { elizaModelApiKey: env.ELIZA_MODEL_API_KEY }),
+    ...(env.KOKORO_TTS_URL === undefined ? {} : { kokoroTtsUrl: env.KOKORO_TTS_URL }),
+    ...(env.KOKORO_TTS_API_KEY === undefined ? {} : { kokoroTtsApiKey: env.KOKORO_TTS_API_KEY }),
     watchlistMaxTokens: env.WATCHLIST_MAX_TOKENS,
     watchlistCacheSeconds: env.WATCHLIST_CACHE_SECONDS,
     watchlistDefaultSizeBnb: env.WATCHLIST_DEFAULT_SIZE_BNB,

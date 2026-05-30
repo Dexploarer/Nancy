@@ -1,4 +1,4 @@
-import { Bot, type Context } from "grammy";
+import { Bot, InputFile, type Context } from "grammy";
 import type { AppConfig } from "../config.js";
 import { AppError, InvalidInputError, UserInputError } from "../domain/errors.js";
 import type { Repository } from "../storage/repository.js";
@@ -27,6 +27,7 @@ import { PoolService } from "../services/poolService.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
 import type { WatchlistService } from "../services/watchlistService.js";
 import type { ExplanationService } from "../services/explanationService.js";
+import { VoiceService, voiceSupported } from "../services/voiceService.js";
 import { flapLaunchKeyboard, helpText, linkPageKeyboard, mainMenuKeyboard, nancyDetailKeyboard, nancyLangKeyboard, nancyListKeyboard, safeGroupKeyboard, safeSubmissionKeyboard, tradeProposalKeyboard } from "./keyboards.js";
 import { normalizeLanguages } from "../domain/languages.js";
 import { formatWatchlist, formatWatchlistEntry } from "./watchlistView.js";
@@ -59,6 +60,7 @@ export type BotDependencies = {
   depositVerificationService: DepositVerificationService;
   watchlistService: WatchlistService;
   explanationService: ExplanationService;
+  voiceService?: VoiceService;
   config: AppConfig;
 };
 
@@ -439,9 +441,10 @@ export function createBot(dependencies: BotDependencies): Bot {
           }
           const languages = normalizeLanguages((await dependencies.repository.getGroupLanguages(chatId)) ?? []);
           const explanation = await dependencies.explanationService.explain(entry, languages);
+          const voiceAvailable = dependencies.voiceService !== undefined && voiceSupported(languages[0] ?? "en");
           await ctx.editMessageText(formatWatchlistEntry(entry, explanation), {
             parse_mode: "Markdown",
-            reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass")
+            reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass", voiceAvailable)
           });
         } catch (error) {
           Logger.error("[TelegramBot] nancy_detail render failed", { err: error instanceof Error ? error : undefined });
@@ -477,6 +480,43 @@ export function createBot(dependencies: BotDependencies): Bot {
         `To trade this, a trader runs:\n\`/buy ${tokenAddress} <bnbAmount>\`\n\nNancy re-checks risk, builds the Safe transaction, and the owners sign — she never moves funds herself.`,
         { parse_mode: "Markdown" }
       );
+    });
+  });
+
+  bot.callbackQuery(/^nancy_voice:(.+)$/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const tokenAddress = String(ctx.match[1] ?? "");
+      if (dependencies.voiceService === undefined) {
+        await ctx.answerCallbackQuery({ text: "Voice isn't enabled.", show_alert: true });
+        return;
+      }
+      const languages = normalizeLanguages((await dependencies.repository.getGroupLanguages(chatId)) ?? []);
+      const primary = languages[0] ?? "en";
+      if (!voiceSupported(primary)) {
+        await ctx.answerCallbackQuery({ text: "Voice isn't available for that language yet.", show_alert: true });
+        return;
+      }
+      await ctx.answerCallbackQuery({ text: "🔊 Recording Nancy's take…" });
+      void (async () => {
+        try {
+          const treasuryBnb = await groupTreasuryBnb(dependencies, chatId, fromId);
+          const list = await dependencies.watchlistService.getList(Number(chatId), treasuryBnb);
+          const entry = list.find((e) => e.candidate.tokenAddress.toLowerCase() === tokenAddress.toLowerCase());
+          if (entry === undefined) return;
+          const take = await dependencies.explanationService.explain(entry, [primary]);
+          const spoken = take.replace(/[*_`\[\]#]/g, "");
+          const audio = await dependencies.voiceService!.synthesize(spoken, primary);
+          if (audio === null) {
+            await ctx.reply("Couldn't record that one — try again in a moment.");
+            return;
+          }
+          await ctx.replyWithVoice(new InputFile(audio, "nancy.ogg"), { caption: `🔊 Nancy on ${entry.candidate.tokenSymbol}` });
+        } catch (error) {
+          Logger.error("[TelegramBot] nancy_voice failed", { err: error instanceof Error ? error : undefined });
+        }
+      })();
     });
   });
 

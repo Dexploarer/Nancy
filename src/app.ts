@@ -9,6 +9,7 @@ import { TradeService } from "./services/tradeService.js";
 import { ElizaOkFeedService } from "./services/elizaOkFeedService.js";
 import { WatchlistService } from "./services/watchlistService.js";
 import { ElizaExplanationService, TemplatedExplanationService, type ExplanationService } from "./services/explanationService.js";
+import { VoiceService } from "./services/voiceService.js";
 import { FlapLaunchService } from "./services/flapLaunchService.js";
 import { SafeSubmissionService } from "./services/safeSubmissionService.js";
 import { WalletLinkService } from "./services/walletLinkService.js";
@@ -101,6 +102,13 @@ export function buildApp(config: AppConfig): App {
           model: config.elizaModelName,
           ...(config.elizaModelApiKey === undefined ? {} : { apiKey: config.elizaModelApiKey })
         });
+  const voiceService =
+    config.kokoroTtsUrl === undefined
+      ? undefined
+      : new VoiceService({
+          url: config.kokoroTtsUrl,
+          ...(config.kokoroTtsApiKey === undefined ? {} : { apiKey: config.kokoroTtsApiKey })
+        });
   const flapLaunchService = new FlapLaunchService(repository, flapService);
   const flapMetadataService = new FlapMetadataService(config.pinataJwt);
   const safeSubmissionService = new SafeSubmissionService(
@@ -124,6 +132,7 @@ export function buildApp(config: AppConfig): App {
     safeSubmissionService,
     watchlistService,
     explanationService,
+    ...(voiceService === undefined ? {} : { voiceService }),
     config
   });
   const depositWatcher = new DepositWatcher(
