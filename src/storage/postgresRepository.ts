@@ -30,6 +30,8 @@ import type {
   WalletLinkRow
 } from "./postgresRows.js";
 
+type GroupSettingsRow = { languages: string };
+
 export class PostgresRepository implements Repository {
   private readonly pool: Pool;
 
@@ -426,5 +428,28 @@ export class PostgresRepository implements Repository {
       telegramUserId: row.telegram_user_id,
       createdAt: row.created_at
     }));
+  }
+
+  async getGroupLanguages(chatId: ChatId): Promise<string[] | null> {
+    try {
+      const result = await this.pool.query<GroupSettingsRow>(
+        "select languages from group_settings where chat_id = $1",
+        [chatId]
+      );
+      const row = result.rows[0];
+      if (row === undefined) {
+        return null;
+      }
+      return row.languages.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+    } catch {
+      return null; // table may not exist yet (migration pending) -> caller defaults to English
+    }
+  }
+
+  async setGroupLanguages(chatId: ChatId, languages: string[]): Promise<void> {
+    await this.pool.query(
+      "insert into group_settings(chat_id, languages, updated_at) values ($1, $2, now()) on conflict (chat_id) do update set languages = excluded.languages, updated_at = excluded.updated_at",
+      [chatId, languages.join(",")]
+    );
   }
 }

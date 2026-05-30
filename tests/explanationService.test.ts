@@ -20,8 +20,8 @@ describe("explanationService", () => {
 
   it("templated explanation is deterministic and mentions the grade", async () => {
     const svc = new TemplatedExplanationService();
-    const a = await svc.explain(entry());
-    const b = await svc.explain(entry());
+    const a = await svc.explain(entry(), ["en"]);
+    const b = await svc.explain(entry(), ["en"]);
     expect(a).toBe(b);
     expect(a).toContain("A");
   });
@@ -29,7 +29,7 @@ describe("explanationService", () => {
   it("eliza explanation falls back to template when the model errors", async () => {
     Object.defineProperty(globalThis, "fetch", { configurable: true, value: async () => { throw new Error("down"); } });
     const svc = new ElizaExplanationService({ url: "https://model.example/v1/chat/completions", model: "eliza-1", timeoutMs: 50 });
-    const text = await svc.explain(entry());
+    const text = await svc.explain(entry(), ["en"]);
     expect(text.length).toBeGreaterThan(0); // never throws; returns the templated fallback
     expect(text).toContain("FOO");
   });
@@ -44,7 +44,7 @@ describe("explanationService", () => {
       }
     });
     const svc = new ElizaExplanationService({ url: "https://model.example/v1/chat/completions", model: "eliza-1", timeoutMs: 1000 });
-    const text = await svc.explain(entry());
+    const text = await svc.explain(entry(), ["en"]);
     expect(body?.chat_template_kwargs?.enable_thinking).toBe(false);
     expect(body?.messages?.[0]?.content.toLowerCase()).toContain("do not");
     expect(text).toContain("verdict");
@@ -56,8 +56,26 @@ describe("explanationService", () => {
       value: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: "<think>let me reason about this</think>FOO is exitable at this size." } }] }) }) as Response
     });
     const svc = new ElizaExplanationService({ url: "https://model.example/v1/chat/completions", model: "eliza-1", timeoutMs: 1000 });
-    const text = await svc.explain(entry());
+    const text = await svc.explain(entry(), ["en"]);
     expect(text).toBe("FOO is exitable at this size.");
     expect(text.toLowerCase()).not.toContain("think");
+  });
+
+  it("multi-language: generates one verdict per language and stacks them with flags", async () => {
+    const systems: string[] = [];
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: async (_url: string, init: { body: string }) => {
+        const b = JSON.parse(init.body) as { messages: { role: string; content: string }[] };
+        systems.push(b.messages[0]!.content);
+        return { ok: true, json: async () => ({ choices: [{ message: { content: "verdict text" } }] }) } as Response;
+      }
+    });
+    const svc = new ElizaExplanationService({ url: "https://m/v1/chat/completions", model: "eliza-1", timeoutMs: 1000 });
+    const text = await svc.explain(entry(), ["zh", "en"]);
+    expect(systems.length).toBe(2); // one call per language, sequential
+    expect(systems.some((s) => s.includes("中文"))).toBe(true);
+    expect(text).toContain("🇨🇳");
+    expect(text).toContain("🇬🇧");
   });
 });

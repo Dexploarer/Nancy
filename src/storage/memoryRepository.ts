@@ -20,6 +20,7 @@ export class MemoryRepository implements Repository {
   private readonly flapLaunches = new Map<string, FlapLaunchProposal>();
   private readonly safeSubmissions = new Map<string, SafeSubmission>();
   private readonly usageEvents: UsageEvent[] = [];
+  private readonly groupLanguages = new Map<ChatId, string[]>();
 
   async getGroupWallet(chatId: ChatId): Promise<GroupWallet | null> {
     return this.groupWallets.get(chatId) ?? null;
@@ -109,6 +110,14 @@ export class MemoryRepository implements Repository {
 
   async listUsageEventsSince(since: Date): Promise<UsageEvent[]> {
     return this.usageEvents.filter((event) => event.createdAt >= since);
+  }
+
+  async getGroupLanguages(chatId: ChatId): Promise<string[] | null> {
+    return this.groupLanguages.get(chatId) ?? null;
+  }
+
+  async setGroupLanguages(chatId: ChatId, languages: string[]): Promise<void> {
+    this.groupLanguages.set(chatId, languages);
   }
 }
 

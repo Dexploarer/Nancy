@@ -33,4 +33,6 @@ export interface Repository {
   saveSafeSubmission(submission: SafeSubmission): Promise<void>;
   saveUsageEvent(event: UsageEvent): Promise<void>;
   listUsageEventsSince(since: Date): Promise<UsageEvent[]>;
+  getGroupLanguages(chatId: ChatId): Promise<string[] | null>;
+  setGroupLanguages(chatId: ChatId, languages: string[]): Promise<void>;
 }

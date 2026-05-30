@@ -1,12 +1,16 @@
 import type { WatchlistEntry } from "../domain/types.js";
+import { languageByCode } from "../domain/languages.js";
 
 export interface ExplanationService {
-  explain(entry: WatchlistEntry): Promise<string>;
+  explain(entry: WatchlistEntry, languages: string[]): Promise<string>;
 }
+
+const SYSTEM_PROMPT =
+  "You are writing one short explanation for a token already scored by a deterministic system. The verdict is FINAL — do NOT change, question, contradict it, or mention buying or selling. In at most 2 sentences, explain why the given numbers support the stated verdict.";
 
 // Deterministic, no I/O. Also the fallback when the model is unavailable.
 export class TemplatedExplanationService implements ExplanationService {
-  async explain(entry: WatchlistEntry): Promise<string> {
+  async explain(entry: WatchlistEntry, _languages: string[]): Promise<string> {
     const verdict =
       entry.gate === "pass" ? "looks exitable" : entry.gate === "warn" ? "is risky to exit" : "is unsafe to enter";
     const head = `${entry.candidate.tokenSymbol} — grade ${entry.grade} (${entry.gate}). At ${entry.treasurySizeBnb} BNB it ${verdict}.`;
@@ -24,7 +28,21 @@ export class ElizaExplanationService implements ExplanationService {
 
   constructor(private readonly config: ElizaConfig) {}
 
-  async explain(entry: WatchlistEntry): Promise<string> {
+  async explain(entry: WatchlistEntry, languages: string[]): Promise<string> {
+    const langs = languages.length > 0 ? languages : ["en"];
+    const first = langs[0] ?? "en";
+    if (langs.length === 1) return this.generate(entry, first);
+    const parts: string[] = [];
+    for (const code of langs) {
+      const lang = languageByCode(code);
+      const text = await this.generate(entry, code); // one language at a time (CPU is sequential)
+      parts.push(lang ? `${lang.flag} ${text}` : text);
+    }
+    return parts.join("\n\n");
+  }
+
+  private async generate(entry: WatchlistEntry, code: string): Promise<string> {
+    const lang = languageByCode(code);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 20000);
     try {
@@ -43,8 +61,7 @@ export class ElizaExplanationService implements ExplanationService {
           messages: [
             {
               role: "system",
-              content:
-                "You are writing one short explanation for a token already scored by a deterministic system. The verdict is FINAL — do NOT change, question, contradict it, or mention buying or selling. In at most 2 sentences, explain why the given numbers support the stated verdict."
+              content: lang && lang.code !== "en" ? `${SYSTEM_PROMPT} Respond entirely in ${lang.label}.` : SYSTEM_PROMPT
             },
             { role: "user", content: prompt(entry) }
           ],
@@ -52,12 +69,12 @@ export class ElizaExplanationService implements ExplanationService {
           temperature: 0.2
         })
       });
-      if (!response.ok) return this.fallback.explain(entry);
+      if (!response.ok) return this.fallback.explain(entry, [code]);
       const body = (await response.json()) as { choices?: { message?: { content?: string } }[] };
       const text = stripThink(body.choices?.[0]?.message?.content ?? "").trim();
-      return text.length > 0 ? text : this.fallback.explain(entry);
+      return text.length > 0 ? text : this.fallback.explain(entry, [code]);
     } catch {
-      return this.fallback.explain(entry);
+      return this.fallback.explain(entry, [code]);
     } finally {
       clearTimeout(timer);
     }

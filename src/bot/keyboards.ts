@@ -1,5 +1,6 @@
 import { InlineKeyboard } from "grammy";
 import type { SafeCreationSession } from "../domain/types.js";
+import { SUPPORTED_LANGUAGES } from "../domain/languages.js";
 
 export function mainMenuKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
@@ -136,6 +137,16 @@ export function nancyListKeyboard(entries: { candidate: { tokenSymbol: string; t
   entries.slice(0, 10).forEach((e, i) => {
     keyboard.text(`🔎 ${e.candidate.tokenSymbol}`, `nancy_detail:${e.candidate.tokenAddress}`);
     if (i % 2 === 1) keyboard.row();
+  });
+  return keyboard;
+}
+
+export function nancyLangKeyboard(selected: string[]): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  SUPPORTED_LANGUAGES.forEach((l, i) => {
+    const on = selected.includes(l.code) ? "✅ " : "";
+    keyboard.text(`${on}${l.flag} ${l.label}`, `nancy_lang:${l.code}`);
+    if (i % 3 === 2) keyboard.row();
   });
   return keyboard;
 }

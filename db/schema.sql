@@ -161,3 +161,9 @@ create table if not exists usage_events (
 );
 
 create index if not exists usage_events_created_at_idx on usage_events(created_at desc);
+
+create table if not exists group_settings (
+  chat_id text primary key,
+  languages text not null default 'en',
+  updated_at timestamptz not null default now()
+);

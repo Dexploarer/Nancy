@@ -27,7 +27,8 @@ import { PoolService } from "../services/poolService.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
 import type { WatchlistService } from "../services/watchlistService.js";
 import type { ExplanationService } from "../services/explanationService.js";
-import { flapLaunchKeyboard, helpText, linkPageKeyboard, mainMenuKeyboard, nancyDetailKeyboard, nancyListKeyboard, safeGroupKeyboard, safeSubmissionKeyboard, tradeProposalKeyboard } from "./keyboards.js";
+import { flapLaunchKeyboard, helpText, linkPageKeyboard, mainMenuKeyboard, nancyDetailKeyboard, nancyLangKeyboard, nancyListKeyboard, safeGroupKeyboard, safeSubmissionKeyboard, tradeProposalKeyboard } from "./keyboards.js";
+import { normalizeLanguages } from "../domain/languages.js";
 import { formatWatchlist, formatWatchlistEntry } from "./watchlistView.js";
 import { registerSafeCallbacks } from "./safeCallbacks.js";
 import { registerPoolCommands } from "./poolCommands.js";
@@ -256,6 +257,18 @@ export function createBot(dependencies: BotDependencies): Bot {
     });
   });
 
+  bot.command("nancy_lang", async (ctx) => {
+    await handleUserCommand(ctx, "nancy_lang", async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
+      const current = normalizeLanguages((await dependencies.repository.getGroupLanguages(chatId)) ?? []);
+      await ctx.reply(
+        "🌐 Nancy's verdict language(s). Tap to toggle — pick several for multi-language (one verdict per language).",
+        { reply_markup: nancyLangKeyboard(current) }
+      );
+    });
+  });
+
   bot.command("proposal", async (ctx) => {
     await handleUserCommand(ctx, "proposal", async () => {
       const parts = splitCommand(ctx.message?.text, 2);
@@ -417,12 +430,27 @@ export function createBot(dependencies: BotDependencies): Bot {
         await ctx.answerCallbackQuery({ text: "That token rolled off the list — refreshing.", show_alert: false });
         return;
       }
-      const explanation = await dependencies.explanationService.explain(entry);
+      const languages = normalizeLanguages((await dependencies.repository.getGroupLanguages(chatId)) ?? []);
+      const explanation = await dependencies.explanationService.explain(entry, languages);
       await ctx.answerCallbackQuery();
       await ctx.editMessageText(formatWatchlistEntry(entry, explanation), {
         parse_mode: "Markdown",
         reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass")
       });
+    });
+  });
+
+  bot.callbackQuery(/^nancy_lang:(.+)$/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      await requireGroupAdmin(ctx, chatId);
+      const code = String(ctx.match[1] ?? "");
+      const current = normalizeLanguages((await dependencies.repository.getGroupLanguages(chatId)) ?? []);
+      const next = current.includes(code) ? current.filter((c) => c !== code) : [...current, code];
+      const normalized = normalizeLanguages(next);
+      await dependencies.repository.setGroupLanguages(chatId, normalized);
+      await ctx.answerCallbackQuery();
+      await ctx.editMessageReplyMarkup({ reply_markup: nancyLangKeyboard(normalized) });
     });
   });
 
