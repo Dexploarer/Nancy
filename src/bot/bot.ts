@@ -25,6 +25,8 @@ import { SafeDeploymentService } from "../services/safeDeploymentService.js";
 import { SafeGroupSetupService } from "../services/safeGroupSetupService.js";
 import { PoolService } from "../services/poolService.js";
 import { DepositVerificationService } from "../services/depositVerificationService.js";
+import type { WatchlistService } from "../services/watchlistService.js";
+import type { ExplanationService } from "../services/explanationService.js";
 import { flapLaunchKeyboard, helpText, linkPageKeyboard, mainMenuKeyboard, safeGroupKeyboard, safeSubmissionKeyboard, tradeProposalKeyboard } from "./keyboards.js";
 import { registerSafeCallbacks } from "./safeCallbacks.js";
 import { registerPoolCommands } from "./poolCommands.js";
@@ -53,6 +55,8 @@ export type BotDependencies = {
   safeGroupSetupService: SafeGroupSetupService;
   poolService: PoolService;
   depositVerificationService: DepositVerificationService;
+  watchlistService: WatchlistService;
+  explanationService: ExplanationService;
   config: AppConfig;
 };
 

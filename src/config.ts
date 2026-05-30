@@ -36,7 +36,7 @@ const EnvSchema = z
     ELIZA_MODEL_API_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional()),
     WATCHLIST_MAX_TOKENS: z.coerce.number().int().min(1).max(50).default(10),
     WATCHLIST_CACHE_SECONDS: z.coerce.number().int().min(0).max(3600).default(60),
-    WATCHLIST_DEFAULT_SIZE_BNB: z.coerce.number().min(0).default(0.1),
+    WATCHLIST_DEFAULT_SIZE_BNB: z.coerce.number().min(0.0001).default(0.1),
     MAX_EXIT_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(10000).default(1500),
     MIN_LP_LOCKED_PERCENT: z.coerce.number().min(0).max(100).default(50),
     MAX_LP_HOLDER_TOP_PERCENT: z.coerce.number().min(0).max(100).default(50)

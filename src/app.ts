@@ -6,6 +6,9 @@ import { PancakeSwapService } from "./chain/pancakeSwapService.js";
 import { createBot } from "./bot/bot.js";
 import { GroupWalletService } from "./services/groupWalletService.js";
 import { TradeService } from "./services/tradeService.js";
+import { ElizaOkFeedService } from "./services/elizaOkFeedService.js";
+import { WatchlistService } from "./services/watchlistService.js";
+import { ElizaExplanationService, TemplatedExplanationService, type ExplanationService } from "./services/explanationService.js";
 import { FlapLaunchService } from "./services/flapLaunchService.js";
 import { SafeSubmissionService } from "./services/safeSubmissionService.js";
 import { WalletLinkService } from "./services/walletLinkService.js";
@@ -71,6 +74,30 @@ export function buildApp(config: AppConfig): App {
     maxSellTaxBps: config.maxSellTaxBps
   });
   const tradeService = new TradeService(repository, flapService, pancakeSwapService, tokenRiskService);
+  const elizaOkFeedService = new ElizaOkFeedService({
+    url: config.elizaOkTrendingUrl,
+    cacheSeconds: config.watchlistCacheSeconds
+  });
+  const watchlistService = new WatchlistService(elizaOkFeedService, pancakeSwapService, tokenRiskService, {
+    maxTokens: config.watchlistMaxTokens,
+    defaultSizeBnb: config.watchlistDefaultSizeBnb,
+    thresholds: {
+      mode: config.riskCheckMode,
+      minLiquidityUsd: config.minLiquidityUsd,
+      maxSellTaxBps: config.maxSellTaxBps,
+      maxExitSlippageBps: config.maxExitSlippageBps,
+      minLpLockedPercent: config.minLpLockedPercent,
+      maxLpHolderTopPercent: config.maxLpHolderTopPercent
+    }
+  });
+  const explanationService: ExplanationService =
+    config.elizaModelUrl === undefined
+      ? new TemplatedExplanationService()
+      : new ElizaExplanationService({
+          url: config.elizaModelUrl,
+          model: config.elizaModelName,
+          ...(config.elizaModelApiKey === undefined ? {} : { apiKey: config.elizaModelApiKey })
+        });
   const flapLaunchService = new FlapLaunchService(repository, flapService);
   const flapMetadataService = new FlapMetadataService(config.pinataJwt);
   const safeSubmissionService = new SafeSubmissionService(
@@ -92,6 +119,8 @@ export function buildApp(config: AppConfig): App {
     poolService,
     depositVerificationService,
     safeSubmissionService,
+    watchlistService,
+    explanationService,
     config
   });
   const depositWatcher = new DepositWatcher(
