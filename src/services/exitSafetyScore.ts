@@ -1,5 +1,12 @@
 import type { ExitSafetyGate, ExitSafetyGrade } from "../domain/types.js";
 
+// Unknown depth is treated as this round-trip cost — high enough to saturate the cost penalty below.
+const UNKNOWN_ROUND_TRIP_BPS = 2000;
+// Score points removed per this many bps of round-trip exit cost (so /50 = 1 pt per 50 bps).
+const COST_BPS_PER_POINT = 50;
+// Sell tax above this (but at/under the block limit maxSellTaxBps) is a warning, not a block.
+const NOTABLE_SELL_TAX_BPS = 300;
+
 export type ExitSafetySignals = {
   momentumScore: number; // 0–100 from elizaOK
   priceChangeH1?: number;
@@ -7,7 +14,6 @@ export type ExitSafetySignals = {
   roundTripLossBps?: number; // combined enter+exit cost at treasury size; undefined = unknown
   honeypot: boolean;
   cannotSellAll: boolean;
-  buyTaxBps?: number;
   sellTaxBps?: number;
   lpLockedPercent?: number; // 0–100
   lpHolderTopPercent?: number; // 0–100
@@ -65,13 +71,15 @@ export function computeExitSafetyScore(signals: ExitSafetySignals, t: ExitSafety
   if (signals.priceChangeH1 !== undefined && Math.abs(signals.priceChangeH1) > 50) {
     warns.push(`Volatile: ${signals.priceChangeH1.toFixed(0)}% in 1h (chase risk)`);
   }
-  if (signals.sellTaxBps !== undefined && signals.sellTaxBps > 300 && signals.sellTaxBps <= t.maxSellTaxBps) {
+  if (signals.sellTaxBps !== undefined && signals.sellTaxBps > NOTABLE_SELL_TAX_BPS && signals.sellTaxBps <= t.maxSellTaxBps) {
     warns.push(`Sell tax ${(signals.sellTaxBps / 100).toFixed(1)}% eats into exits`);
   }
 
   // --- Score (0–100). Start high, subtract for risk. Momentum is a small secondary nudge. ---
+  // Risk signals compound on purpose: a hard-failing signal incurs both its continuous
+  // deduction (e.g. exit cost, low lock) AND the per-hard-block penalty below.
   let score = 100;
-  score -= Math.min(40, (signals.roundTripLossBps ?? 2000) / 50); // exit cost dominates
+  score -= Math.min(40, (signals.roundTripLossBps ?? UNKNOWN_ROUND_TRIP_BPS) / COST_BPS_PER_POINT); // exit cost dominates
   if (signals.lpLockedPercent !== undefined) score -= Math.max(0, (t.minLpLockedPercent - signals.lpLockedPercent) * 0.5);
   if (signals.lpHolderTopPercent !== undefined) score -= Math.min(15, signals.lpHolderTopPercent * 0.2);
   score -= hardBlocks.length * 20;

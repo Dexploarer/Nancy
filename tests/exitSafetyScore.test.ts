@@ -17,7 +17,6 @@ function base(): ExitSafetySignals {
     roundTripLossBps: 300,
     honeypot: false,
     cannotSellAll: false,
-    buyTaxBps: 100,
     sellTaxBps: 100,
     lpLockedPercent: 80,
     lpHolderTopPercent: 10,
@@ -31,6 +30,7 @@ describe("computeExitSafetyScore", () => {
     const r = computeExitSafetyScore(base(), thresholds);
     expect(r.gate).toBe("pass");
     expect(r.grade).toBe("A");
+    expect(r.score).toBe(96);
   });
 
   it("blocks a honeypot", () => {
@@ -71,11 +71,20 @@ describe("computeExitSafetyScore", () => {
   it("warns (not block) on a short-ish but exitable token in warn mode", () => {
     const r = computeExitSafetyScore({ ...base(), lpLockedPercent: 30, sellTaxBps: 800 }, { ...thresholds, mode: "warn" });
     expect(r.gate).toBe("warn");
+    expect(r.score).toBe(61);
+    expect(r.grade).toBe("C");
   });
 
   it("is reproducible: same input -> same output", () => {
     const a = computeExitSafetyScore(base(), thresholds);
     const b = computeExitSafetyScore(base(), thresholds);
     expect(a).toEqual(b);
+  });
+
+  it("blocks when depth is partially unknown (liquidity known, slippage unknown)", () => {
+    const signals = base();
+    delete (signals as { roundTripLossBps?: number }).roundTripLossBps; // omit -> undefined
+    const r = computeExitSafetyScore(signals, thresholds);
+    expect(r.gate).toBe("block");
   });
 });
