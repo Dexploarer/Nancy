@@ -41,3 +41,10 @@ services:
       #   PLATFORM_FEE_RECIPIENT, PLATFORM_COMMISSION_RECEIVER, PLATFORM_ADMIN_IDS,
       #   TRADE_FEE_BPS, POOL_WITHDRAWAL_FEE_BPS, DEX_DEADLINE_SECONDS, DEPOSIT_WATCH,
       #   MAX_BUY_TAX_BPS, MAX_SELL_TAX_BPS, MIN_LIQUIDITY_USD, RISK_CHECK_MODE
+      # OPTIONAL — eliza-1 inference (self-hosted CPU droplet; bot uses templated fallback when unset):
+      #   ELIZA_MODEL_URL, ELIZA_MODEL_NAME
+      # and this as SECRET (when eliza-1 inference is enabled):
+      #   ELIZA_MODEL_API_KEY
+      # OPTIONAL — /nancy watchlist tuning (plain config; hard-coded defaults used when unset):
+      #   WATCHLIST_MAX_TOKENS, WATCHLIST_CACHE_SECONDS, WATCHLIST_DEFAULT_SIZE_BNB,
+      #   MAX_EXIT_SLIPPAGE_BPS, MIN_LP_LOCKED_PERCENT, MAX_LP_HOLDER_TOP_PERCENT

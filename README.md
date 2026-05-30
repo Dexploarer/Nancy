@@ -74,7 +74,10 @@ See [docs/qa-test-matrix.md](docs/qa-test-matrix.md) for automated, live-smoke, 
 /safe_prepare withdrawal <withdrawalRequestId>
 /safe_status <safeSubmissionId>
 /safe_execute <safeSubmissionId>
+/nancy
 ```
+
+`/nancy` — exit-safety reality check on elizaOK's trending list — due diligence, not buy calls.
 
 Example:
 
