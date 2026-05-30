@@ -82,7 +82,10 @@ export function buildApp(config: AppConfig): App {
     maxTokens: config.watchlistMaxTokens,
     defaultSizeBnb: config.watchlistDefaultSizeBnb,
     thresholds: {
-      mode: config.riskCheckMode,
+      // The watchlist gate is informational and always block-grades, so genuinely
+      // unsafe tokens show 🔴 instead of a sea of identical 🟡 warns. (The /buy trade
+      // gate still uses RISK_CHECK_MODE for whether to hard-block a real trade.)
+      mode: "block",
       minLiquidityUsd: config.minLiquidityUsd,
       maxSellTaxBps: config.maxSellTaxBps,
       maxExitSlippageBps: config.maxExitSlippageBps,

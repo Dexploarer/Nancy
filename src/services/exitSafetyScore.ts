@@ -52,7 +52,15 @@ export function computeExitSafetyScore(signals: ExitSafetySignals, t: ExitSafety
     hardBlocks.push(`Sell tax ${(signals.sellTaxBps / 100).toFixed(1)}% exceeds the exit-safety limit`);
   }
   if (signals.roundTripLossBps !== undefined && signals.roundTripLossBps > t.maxExitSlippageBps) {
-    hardBlocks.push(`Round-trip cost ${(signals.roundTripLossBps / 100).toFixed(1)}% at your size — too thin to exit cleanly`);
+    // A ~total round-trip loss almost always means the PancakeSwap-v2 WBNB pair is
+    // near-empty (the real liquidity is on a launchpad bonding curve or Infinity),
+    // not a literal 100% loss — word it honestly so it doesn't look broken next to a
+    // healthy DexScreener liquidity figure.
+    hardBlocks.push(
+      signals.roundTripLossBps >= 9000
+        ? "No clean PancakeSwap-v2 exit at your size — liquidity isn't in the v2 pair (likely a launchpad curve or Infinity)"
+        : `Round-trip cost ${(signals.roundTripLossBps / 100).toFixed(1)}% at your size — too thin to exit cleanly`
+    );
   }
   if (signals.liquidityUsd !== undefined && signals.liquidityUsd < t.minLiquidityUsd) {
     hardBlocks.push(`Liquidity below $${t.minLiquidityUsd}`);

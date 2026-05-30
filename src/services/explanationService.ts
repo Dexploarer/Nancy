@@ -79,7 +79,11 @@ function prompt(entry: WatchlistEntry): string {
   return [
     `Verdict: ${entry.gate.toUpperCase()}, grade ${entry.grade} (${meaning}).`,
     `Token ${entry.candidate.tokenSymbol}, treasury size ${entry.treasurySizeBnb} BNB.`,
-    entry.roundTripLossBps === undefined ? "Round-trip exit cost: unknown" : `Round-trip exit cost: ${(entry.roundTripLossBps / 100).toFixed(1)}%`,
+    entry.roundTripLossBps === undefined
+      ? "Round-trip exit cost: unknown"
+      : entry.roundTripLossBps >= 9000
+        ? "PancakeSwap-v2 exit: none at this size (liquidity is on a launchpad curve or Infinity, not the v2 pair)"
+        : `Round-trip exit cost: ${(entry.roundTripLossBps / 100).toFixed(1)}%`,
     entry.liquidityUsd === undefined ? "Liquidity: unknown" : `Liquidity: $${Math.round(entry.liquidityUsd)}`,
     `elizaOK momentum: ${entry.candidate.momentumScore}/100 (${entry.candidate.conviction})`,
     `Flags: ${entry.reasons.length > 0 ? entry.reasons.join("; ") : "none"}`

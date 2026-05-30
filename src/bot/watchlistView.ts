@@ -11,7 +11,7 @@ function stripMarkdown(s: string): string {
 export function formatWatchlist(entries: WatchlistEntry[], treasurySizeBnb: number): string {
   const lines = [
     "💛 *Nancy's watch* — elizaOK finds them, I check if your group can get *out*.",
-    `_Exit-safety at ${treasurySizeBnb} BNB. Not financial advice._`,
+    `_Exit-safety at ${treasurySizeBnb} BNB · verdicts ran by eliza-1 · Not financial advice._`,
     ""
   ];
   if (entries.length === 0) {
@@ -31,7 +31,11 @@ export function formatWatchlistEntry(entry: WatchlistEntry, explanation: string)
     stripMarkdown(explanation),
     "",
     entry.liquidityUsd === undefined ? "Liquidity: unknown" : `Liquidity: $${Math.round(entry.liquidityUsd).toLocaleString()}`,
-    entry.roundTripLossBps === undefined ? "Exit cost at your size: unknown" : `Exit cost at your size: ${(entry.roundTripLossBps / 100).toFixed(1)}%`,
+    entry.roundTripLossBps === undefined
+      ? "Exit cost at your size: unknown"
+      : entry.roundTripLossBps >= 9000
+        ? "PancakeSwap-v2 exit: none at your size (liquidity isn't in the v2 pair)"
+        : `Exit cost at your size: ${(entry.roundTripLossBps / 100).toFixed(1)}%`,
     `Token: \`${entry.candidate.tokenAddress}\``
   ];
   if (entry.reasons.length > 0) lines.push("", "Flags: " + entry.reasons.join("; "));
