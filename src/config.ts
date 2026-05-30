@@ -29,7 +29,17 @@ const EnvSchema = z
     RISK_CHECK_MODE: z.enum(["warn", "block"]),
     MIN_LIQUIDITY_USD: z.coerce.number().min(0),
     MAX_BUY_TAX_BPS: z.coerce.number().int().min(0).max(10000),
-    MAX_SELL_TAX_BPS: z.coerce.number().int().min(0).max(10000)
+    MAX_SELL_TAX_BPS: z.coerce.number().int().min(0).max(10000),
+    ELIZAOK_TRENDING_URL: z.string().url().default("https://elizatest.com/api/elizaok/trending"),
+    ELIZA_MODEL_URL: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
+    ELIZA_MODEL_NAME: z.string().min(1).default("eliza-1"),
+    ELIZA_MODEL_API_KEY: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional()),
+    WATCHLIST_MAX_TOKENS: z.coerce.number().int().min(1).max(50).default(10),
+    WATCHLIST_CACHE_SECONDS: z.coerce.number().int().min(0).max(3600).default(60),
+    WATCHLIST_DEFAULT_SIZE_BNB: z.coerce.number().min(0).default(0.1),
+    MAX_EXIT_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(10000).default(1500),
+    MIN_LP_LOCKED_PERCENT: z.coerce.number().min(0).max(100).default(50),
+    MAX_LP_HOLDER_TOP_PERCENT: z.coerce.number().min(0).max(100).default(50)
   })
   .superRefine((env, ctx) => {
     if (env.STORAGE_DRIVER === "postgres" && env.DATABASE_URL === undefined) {
@@ -67,6 +77,16 @@ export type AppConfig = {
   minLiquidityUsd: number;
   maxBuyTaxBps: number;
   maxSellTaxBps: number;
+  elizaOkTrendingUrl: string;
+  elizaModelUrl?: string;
+  elizaModelName: string;
+  elizaModelApiKey?: string;
+  watchlistMaxTokens: number;
+  watchlistCacheSeconds: number;
+  watchlistDefaultSizeBnb: number;
+  maxExitSlippageBps: number;
+  minLpLockedPercent: number;
+  maxLpHolderTopPercent: number;
 };
 
 export function loadConfig(): AppConfig {
@@ -101,6 +121,16 @@ export function loadConfig(): AppConfig {
     riskCheckMode: env.RISK_CHECK_MODE,
     minLiquidityUsd: env.MIN_LIQUIDITY_USD,
     maxBuyTaxBps: env.MAX_BUY_TAX_BPS,
-    maxSellTaxBps: env.MAX_SELL_TAX_BPS
+    maxSellTaxBps: env.MAX_SELL_TAX_BPS,
+    elizaOkTrendingUrl: env.ELIZAOK_TRENDING_URL,
+    ...(env.ELIZA_MODEL_URL === undefined ? {} : { elizaModelUrl: env.ELIZA_MODEL_URL }),
+    elizaModelName: env.ELIZA_MODEL_NAME,
+    ...(env.ELIZA_MODEL_API_KEY === undefined ? {} : { elizaModelApiKey: env.ELIZA_MODEL_API_KEY }),
+    watchlistMaxTokens: env.WATCHLIST_MAX_TOKENS,
+    watchlistCacheSeconds: env.WATCHLIST_CACHE_SECONDS,
+    watchlistDefaultSizeBnb: env.WATCHLIST_DEFAULT_SIZE_BNB,
+    maxExitSlippageBps: env.MAX_EXIT_SLIPPAGE_BPS,
+    minLpLockedPercent: env.MIN_LP_LOCKED_PERCENT,
+    maxLpHolderTopPercent: env.MAX_LP_HOLDER_TOP_PERCENT
   };
 }

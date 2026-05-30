@@ -47,6 +47,14 @@ function testConfig(): AppConfig {
     riskCheckMode: "warn",
     minLiquidityUsd: 1000,
     maxBuyTaxBps: 1500,
-    maxSellTaxBps: 1500
+    maxSellTaxBps: 1500,
+    elizaOkTrendingUrl: "https://elizatest.com/api/elizaok/trending",
+    elizaModelName: "eliza-1",
+    watchlistMaxTokens: 10,
+    watchlistCacheSeconds: 60,
+    watchlistDefaultSizeBnb: 0.1,
+    maxExitSlippageBps: 1500,
+    minLpLockedPercent: 50,
+    maxLpHolderTopPercent: 50
   };
 }
