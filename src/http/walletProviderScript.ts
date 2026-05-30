@@ -95,5 +95,31 @@ export function walletProviderScript(walletConnectProjectId?: string, chainId = 
       const chosen = opts.length === 1 ? opts[0] : await chooseWallet(opts);
       return await chosen.pick();
     }
+
+    // Pin the wallet to BNB Chain before SENDING a transaction. A picked wallet
+    // (e.g. MetaMask) often defaults to Ethereum, so deploy/execute call this first.
+    // Message signing (personal_sign for link/sign) is chain-agnostic and skips it.
+    async function ensureChain(provider) {
+      const target = "0x" + CHAIN_ID.toString(16);
+      try {
+        const current = await provider.request({ method: "eth_chainId" });
+        if (typeof current === "string" && parseInt(current, 16) === CHAIN_ID) return;
+      } catch (e) { /* some providers can't report chain before a switch; fall through */ }
+      const addParams = {
+        56: { chainId: "0x38", chainName: "BNB Smart Chain", nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 }, rpcUrls: ["https://bsc-dataseed.binance.org"], blockExplorerUrls: ["https://bscscan.com"] },
+        97: { chainId: "0x61", chainName: "BNB Smart Chain Testnet", nativeCurrency: { name: "tBNB", symbol: "tBNB", decimals: 18 }, rpcUrls: ["https://data-seed-prebsc-1-s1.binance.org:8545"], blockExplorerUrls: ["https://testnet.bscscan.com"] }
+      }[CHAIN_ID];
+      try {
+        await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: target }] });
+      } catch (err) {
+        // 4902 (or wrapped) = chain not yet added to the wallet; add it, which also selects it.
+        const code = err && (err.code ?? (err.data && err.data.originalError && err.data.originalError.code));
+        if (addParams && (code === 4902 || code === -32603)) {
+          await provider.request({ method: "wallet_addEthereumChain", params: [addParams] });
+        } else {
+          throw err;
+        }
+      }
+    }
   `;
 }

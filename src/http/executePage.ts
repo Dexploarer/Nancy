@@ -59,6 +59,7 @@ export function renderExecutePage(input: {
       try {
         const provider = await getProvider();
         const accounts = await provider.request({ method: "eth_requestAccounts" });
+        await ensureChain(provider); // force BNB Chain before sending — the wallet may default to Ethereum
         const from = accounts[0];
         const transactionHash = await provider.request({ method: "eth_sendTransaction", params: [{ from, to, data, value: "0x0" }] });
         output.textContent = "Executing… tx " + transactionHash + "\\nConfirming on-chain…";
