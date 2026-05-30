@@ -52,6 +52,7 @@ export function renderLinkPage(link: WalletLink, walletConnectProjectId?: string
       try {
         const provider = await getProvider();
         const accounts = await provider.request({ method: "eth_requestAccounts" });
+        try { await ensureChain(provider); } catch (e) { /* linking signs a message (chain-agnostic); proceed even if the switch is declined */ }
         const address = accounts[0];
         if (address.toLowerCase() !== expectedAddress.toLowerCase()) {
           output.textContent = "Connected wallet " + address + " does not match the wallet you are linking (" + expectedAddress + "). Switch accounts and try again.";
@@ -125,6 +126,7 @@ export function renderLinkStartPage(walletConnectProjectId?: string, chainId?: n
       try {
         const provider = await getProvider();
         const accounts = await provider.request({ method: "eth_requestAccounts" });
+        try { await ensureChain(provider); } catch (e) { /* linking signs a message (chain-agnostic); proceed even if the switch is declined */ }
         const address = accounts[0];
         const startResponse = await fetch("/api/wallet-links", {
           method: "POST",

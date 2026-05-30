@@ -63,6 +63,7 @@ export function renderSigningPage(submission: SafeSubmission, walletConnectProje
       try {
         const provider = await getProvider();
         const accounts = await provider.request({ method: "eth_requestAccounts" });
+        try { await ensureChain(provider); } catch (e) { /* signing a Safe tx hash is chain-agnostic; proceed even if the switch is declined */ }
         const address = accounts[0];
         const signature = await provider.request({
           method: "personal_sign",
