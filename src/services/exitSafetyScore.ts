@@ -1,0 +1,94 @@
+import type { ExitSafetyGate, ExitSafetyGrade } from "../domain/types.js";
+
+export type ExitSafetySignals = {
+  momentumScore: number; // 0–100 from elizaOK
+  priceChangeH1?: number;
+  liquidityUsd?: number; // undefined = unknown depth
+  roundTripLossBps?: number; // combined enter+exit cost at treasury size; undefined = unknown
+  honeypot: boolean;
+  cannotSellAll: boolean;
+  buyTaxBps?: number;
+  sellTaxBps?: number;
+  lpLockedPercent?: number; // 0–100
+  lpHolderTopPercent?: number; // 0–100
+  isBlacklisted: boolean;
+  isOpenSource?: boolean;
+};
+
+export type ExitSafetyThresholds = {
+  mode: "warn" | "block";
+  minLiquidityUsd: number;
+  maxSellTaxBps: number;
+  maxExitSlippageBps: number;
+  minLpLockedPercent: number;
+  maxLpHolderTopPercent: number;
+};
+
+export type ExitSafetyResult = {
+  score: number; // 0–100, higher = safer to enter/exit
+  grade: ExitSafetyGrade;
+  gate: ExitSafetyGate;
+  reasons: string[];
+};
+
+// Deterministic. No time, no randomness, no I/O. Same input => same output.
+export function computeExitSafetyScore(signals: ExitSafetySignals, t: ExitSafetyThresholds): ExitSafetyResult {
+  const hardBlocks: string[] = [];
+  const warns: string[] = [];
+
+  // --- Hard safety failures (cannot exit / will lose funds) ---
+  if (signals.honeypot) hardBlocks.push("Flagged as honeypot — you may not be able to sell");
+  if (signals.cannotSellAll) hardBlocks.push("Cannot-sell-all risk flagged");
+  if (signals.isBlacklisted) hardBlocks.push("Blacklist mechanism present");
+  if (signals.sellTaxBps !== undefined && signals.sellTaxBps > t.maxSellTaxBps) {
+    hardBlocks.push(`Sell tax ${(signals.sellTaxBps / 100).toFixed(1)}% exceeds the exit-safety limit`);
+  }
+  if (signals.roundTripLossBps !== undefined && signals.roundTripLossBps > t.maxExitSlippageBps) {
+    hardBlocks.push(`Round-trip cost ${(signals.roundTripLossBps / 100).toFixed(1)}% at your size — too thin to exit cleanly`);
+  }
+  if (signals.liquidityUsd !== undefined && signals.liquidityUsd < t.minLiquidityUsd) {
+    hardBlocks.push(`Liquidity below $${t.minLiquidityUsd}`);
+  }
+  if (signals.liquidityUsd === undefined || signals.roundTripLossBps === undefined) {
+    hardBlocks.push("Depth unknown — could not confirm you can exit at your size");
+  }
+  if (signals.lpLockedPercent !== undefined && signals.lpLockedPercent < t.minLpLockedPercent) {
+    hardBlocks.push(`Only ${signals.lpLockedPercent.toFixed(0)}% of liquidity locked/burned — rug risk`);
+  }
+
+  // --- Softer concerns (downgrade, not block) ---
+  if (signals.lpLockedPercent === undefined) warns.push("Liquidity lock status unknown");
+  if (signals.lpHolderTopPercent !== undefined && signals.lpHolderTopPercent > t.maxLpHolderTopPercent) {
+    warns.push(`One LP holder controls ${signals.lpHolderTopPercent.toFixed(0)}% of unlocked liquidity`);
+  }
+  if (signals.isOpenSource === false) warns.push("Contract source not verified");
+  if (signals.priceChangeH1 !== undefined && Math.abs(signals.priceChangeH1) > 50) {
+    warns.push(`Volatile: ${signals.priceChangeH1.toFixed(0)}% in 1h (chase risk)`);
+  }
+  if (signals.sellTaxBps !== undefined && signals.sellTaxBps > 300 && signals.sellTaxBps <= t.maxSellTaxBps) {
+    warns.push(`Sell tax ${(signals.sellTaxBps / 100).toFixed(1)}% eats into exits`);
+  }
+
+  // --- Score (0–100). Start high, subtract for risk. Momentum is a small secondary nudge. ---
+  let score = 100;
+  score -= Math.min(40, (signals.roundTripLossBps ?? 2000) / 50); // exit cost dominates
+  if (signals.lpLockedPercent !== undefined) score -= Math.max(0, (t.minLpLockedPercent - signals.lpLockedPercent) * 0.5);
+  if (signals.lpHolderTopPercent !== undefined) score -= Math.min(15, signals.lpHolderTopPercent * 0.2);
+  score -= hardBlocks.length * 20;
+  score -= warns.length * 5;
+  score += Math.min(5, signals.momentumScore / 20); // small secondary nudge
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  const gate: ExitSafetyGate = hardBlocks.length > 0 ? (t.mode === "block" ? "block" : "warn") : warns.length > 0 ? "warn" : "pass";
+  const reasons = [...hardBlocks, ...warns];
+  const grade = gradeFor(score, gate);
+  return { score, grade, gate, reasons };
+}
+
+function gradeFor(score: number, gate: ExitSafetyGate): ExitSafetyGrade {
+  if (gate === "block") return "F";
+  if (score >= 85) return "A";
+  if (score >= 70) return "B";
+  if (score >= 55) return "C";
+  return "D";
+}
