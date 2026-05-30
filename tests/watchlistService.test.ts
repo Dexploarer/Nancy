@@ -46,11 +46,32 @@ describe("WatchlistService", () => {
     const good = list.find((e) => e.candidate.tokenSymbol === "GOOD");
     const rug = list.find((e) => e.candidate.tokenSymbol === "RUG");
     expect(good?.gate).toBe("pass");
-    expect(rug?.gate).toBe("block"); // unlocked LP + unknown depth (sell quote threw)
+    expect(rug?.gate).toBe("block"); // unlocked LP + unknown depth (buy quote returned 0n)
   });
 
   it("ranks safer entries first", async () => {
     const list = await buildService().getList(1);
     expect(list[0]?.candidate.tokenSymbol).toBe("GOOD");
+  });
+
+  it("blocks a candidate when the safety check is unavailable, even with good depth", async () => {
+    const candidate: TrendingCandidate = {
+      rank: 1, tokenAddress: "0x5555555555555555555555555555555555555555", tokenSymbol: "OUTAGE",
+      poolAddress: "0xcccc555555555555555555555555555555555555", dexId: "pancakeswap_v2",
+      momentumScore: 90, conviction: "high", thesis: [], risks: [], reserveUsd: 200000
+    };
+    const feed = { getCandidates: async () => [candidate] };
+    const pancake = {
+      quoteNativeBuy: async (_t: string, amountWei: bigint) => amountWei,
+      quoteTokenSell: async (_t: string, tokenAmount: bigint) => (tokenAmount * 995n) / 1000n
+    };
+    const risk = { checkBscToken: async () => { throw new Error("GoPlus down"); } };
+    const service = new WatchlistService(feed as never, pancake as never, risk as never, {
+      maxTokens: 10, defaultSizeBnb: 1,
+      thresholds: { mode: "block", minLiquidityUsd: 1000, maxSellTaxBps: 1500, maxExitSlippageBps: 1500, minLpLockedPercent: 50, maxLpHolderTopPercent: 50 }
+    });
+    const list = await service.getList(1);
+    expect(list[0]?.gate).toBe("block");
+    expect(list[0]?.reasons.join(" ").toLowerCase()).toContain("safety");
   });
 });

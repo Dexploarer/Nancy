@@ -19,6 +19,7 @@ export type ExitSafetySignals = {
   lpHolderTopPercent?: number; // 0–100
   isBlacklisted: boolean;
   isOpenSource?: boolean;
+  safetyUnknown?: boolean;
 };
 
 export type ExitSafetyThresholds = {
@@ -46,6 +47,7 @@ export function computeExitSafetyScore(signals: ExitSafetySignals, t: ExitSafety
   if (signals.honeypot) hardBlocks.push("Flagged as honeypot — you may not be able to sell");
   if (signals.cannotSellAll) hardBlocks.push("Cannot-sell-all risk flagged");
   if (signals.isBlacklisted) hardBlocks.push("Blacklist mechanism present");
+  if (signals.safetyUnknown) hardBlocks.push("Token safety could not be verified — try again shortly");
   if (signals.sellTaxBps !== undefined && signals.sellTaxBps > t.maxSellTaxBps) {
     hardBlocks.push(`Sell tax ${(signals.sellTaxBps / 100).toFixed(1)}% exceeds the exit-safety limit`);
   }

@@ -87,4 +87,10 @@ describe("computeExitSafetyScore", () => {
     const r = computeExitSafetyScore(signals, thresholds);
     expect(r.gate).toBe("block");
   });
+
+  it("blocks when token safety could not be verified", () => {
+    const r = computeExitSafetyScore({ ...base(), safetyUnknown: true }, thresholds);
+    expect(r.gate).toBe("block");
+    expect(r.grade).toBe("F");
+  });
 });

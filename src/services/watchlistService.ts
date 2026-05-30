@@ -22,7 +22,7 @@ export class WatchlistService {
 
   async getList(_chatId: number, treasurySizeBnb?: number): Promise<WatchlistEntry[]> {
     const size = treasurySizeBnb && treasurySizeBnb > 0 ? treasurySizeBnb : this.config.defaultSizeBnb;
-    const sizeWei = parseEther(size.toString());
+    const sizeWei = parseEther(size.toFixed(18)); // toFixed avoids scientific notation (e.g. "1e-7") that parseEther rejects
     const candidates = await this.feed.getCandidates();
     const entries = await Promise.all(candidates.map((c) => this.enrich(c, size, sizeWei)));
     return entries.sort((a, b) => b.score - a.score).slice(0, this.config.maxTokens);
@@ -44,7 +44,8 @@ export class WatchlistService {
         ...(roundTripLossBps === undefined ? {} : { roundTripLossBps }),
         ...(riskReport.sellTaxBps === undefined ? {} : { sellTaxBps: riskReport.sellTaxBps }),
         ...(riskReport.lpLockedPercent === undefined ? {} : { lpLockedPercent: riskReport.lpLockedPercent }),
-        ...(riskReport.lpHolderTopPercent === undefined ? {} : { lpHolderTopPercent: riskReport.lpHolderTopPercent })
+        ...(riskReport.lpHolderTopPercent === undefined ? {} : { lpHolderTopPercent: riskReport.lpHolderTopPercent }),
+        ...(riskReport.level === "unknown" ? { safetyUnknown: true } : {})
       },
       this.config.thresholds
     );
