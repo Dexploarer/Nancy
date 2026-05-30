@@ -512,7 +512,11 @@ export function createBot(dependencies: BotDependencies): Bot {
             await ctx.reply("Couldn't record that one — try again in a moment.");
             return;
           }
-          await ctx.replyWithVoice(new InputFile(audio, "nancy.ogg"), { caption: `🔊 Nancy on ${entry.candidate.tokenSymbol}` });
+          await ctx.replyWithVoice(new InputFile(audio, "nancy.ogg"), {
+            caption: `🔊 Nancy on ${entry.candidate.tokenSymbol}`,
+            // Re-open the options under the voice note so the user can act once she's done speaking.
+            reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass", true)
+          });
         } catch (error) {
           Logger.error("[TelegramBot] nancy_voice failed", { err: error instanceof Error ? error : undefined });
         }
