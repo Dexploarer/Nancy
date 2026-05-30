@@ -19,6 +19,13 @@ type DexScreenerResponse = {
   pairs?: DexScreenerPair[];
 };
 
+type GoPlusLpHolder = {
+  address?: string;
+  percent?: string;
+  is_locked?: number;
+  tag?: string;
+};
+
 type GoPlusTokenSecurity = {
   is_honeypot?: string;
   cannot_sell_all?: string;
@@ -26,6 +33,9 @@ type GoPlusTokenSecurity = {
   is_open_source?: string;
   buy_tax?: string;
   sell_tax?: string;
+  holder_count?: string;
+  lp_holder_count?: string;
+  lp_holders?: GoPlusLpHolder[];
 };
 
 type GoPlusResponse = {
@@ -46,6 +56,10 @@ export class TokenRiskService {
     const tokenSecurity = getGoPlusTokenSecurity(goPlus, tokenAddress);
     const buyTaxBps = parseTaxBps(tokenSecurity?.buy_tax);
     const sellTaxBps = parseTaxBps(tokenSecurity?.sell_tax);
+    const lp = summarizeLpHolders(tokenSecurity?.lp_holders);
+    const lpHolderCount = parseCount(tokenSecurity?.lp_holder_count);
+    const holderCount = parseCount(tokenSecurity?.holder_count);
+    const lpLocked = lp.lpLockedPercent === undefined ? undefined : lp.lpLockedPercent >= 50;
 
     if (liquidityUsd !== undefined && liquidityUsd < this.config.minLiquidityUsd) {
       reasons.push(`Liquidity below ${this.config.minLiquidityUsd} USD`);
@@ -82,6 +96,11 @@ export class TokenRiskService {
       ...(pairUrl === undefined ? {} : { pairUrl }),
       ...(buyTaxBps === undefined ? {} : { buyTaxBps }),
       ...(sellTaxBps === undefined ? {} : { sellTaxBps }),
+      ...(lpLocked === undefined ? {} : { lpLocked }),
+      ...(lp.lpLockedPercent === undefined ? {} : { lpLockedPercent: lp.lpLockedPercent }),
+      ...(lp.lpHolderTopPercent === undefined ? {} : { lpHolderTopPercent: lp.lpHolderTopPercent }),
+      ...(lpHolderCount === undefined ? {} : { lpHolderCount }),
+      ...(holderCount === undefined ? {} : { holderCount }),
       checkedAt: new Date()
     };
   }
@@ -136,4 +155,41 @@ function parseTaxBps(value: string | undefined): number | undefined {
     return undefined;
   }
   return Math.round(parsed * 10000);
+}
+
+const BURN_ADDRESSES = new Set([
+  "0x0000000000000000000000000000000000000000",
+  "0x000000000000000000000000000000000000dead"
+]);
+
+function parsePercent(value: string | undefined): number | undefined {
+  if (value === undefined || value.length === 0) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return undefined;
+  return parsed * 100; // GoPlus reports fractions (0.6 => 60%)
+}
+
+function summarizeLpHolders(holders: GoPlusLpHolder[] | undefined): {
+  lpLockedPercent?: number;
+  lpHolderTopPercent?: number;
+} {
+  if (holders === undefined || holders.length === 0) return {};
+  let locked = 0;
+  let topUnlocked = 0;
+  for (const holder of holders) {
+    const pct = parsePercent(holder.percent) ?? 0;
+    const isBurn = holder.address !== undefined && BURN_ADDRESSES.has(holder.address.toLowerCase());
+    if (holder.is_locked === 1 || isBurn) {
+      locked += pct;
+    } else if (pct > topUnlocked) {
+      topUnlocked = pct;
+    }
+  }
+  return { lpLockedPercent: locked, lpHolderTopPercent: topUnlocked };
+}
+
+function parseCount(value: string | undefined): number | undefined {
+  if (value === undefined || value.length === 0) return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : undefined;
 }
