@@ -26,7 +26,7 @@ export class ElizaExplanationService implements ExplanationService {
 
   async explain(entry: WatchlistEntry): Promise<string> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 10000);
+    const timer = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 20000);
     try {
       const response = await fetch(this.config.url, {
         method: "POST",
@@ -37,11 +37,14 @@ export class ElizaExplanationService implements ExplanationService {
         },
         body: JSON.stringify({
           model: this.config.model,
+          // eliza-1 is a Qwen3 reasoning model; without this it spends all tokens in
+          // reasoning_content and returns empty content (→ we'd always fall back).
+          chat_template_kwargs: { enable_thinking: false },
           messages: [
             {
               role: "system",
               content:
-                "You explain a token's exit-safety verdict for a group treasury on BNB Chain. Use ONLY the numbers given. Do NOT invent data and do NOT tell anyone to buy. 2 sentences max."
+                "You are writing one short explanation for a token already scored by a deterministic system. The verdict is FINAL — do NOT change, question, contradict it, or mention buying or selling. In at most 2 sentences, explain why the given numbers support the stated verdict."
             },
             { role: "user", content: prompt(entry) }
           ],
@@ -51,8 +54,8 @@ export class ElizaExplanationService implements ExplanationService {
       });
       if (!response.ok) return this.fallback.explain(entry);
       const body = (await response.json()) as { choices?: { message?: { content?: string } }[] };
-      const text = body.choices?.[0]?.message?.content?.trim();
-      return text && text.length > 0 ? text : this.fallback.explain(entry);
+      const text = stripThink(body.choices?.[0]?.message?.content ?? "").trim();
+      return text.length > 0 ? text : this.fallback.explain(entry);
     } catch {
       return this.fallback.explain(entry);
     } finally {
@@ -61,11 +64,21 @@ export class ElizaExplanationService implements ExplanationService {
   }
 }
 
+// Qwen3 reasoning models can still emit <think>…</think>; strip it defensively.
+function stripThink(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+}
+
 function prompt(entry: WatchlistEntry): string {
+  const meaning =
+    entry.gate === "pass"
+      ? "safe to enter and exit at this size"
+      : entry.gate === "warn"
+        ? "risky to exit at this size"
+        : "unsafe to exit at this size";
   return [
-    `Token: ${entry.candidate.tokenSymbol} (${entry.candidate.tokenAddress})`,
-    `Nancy grade: ${entry.grade}; gate: ${entry.gate}; score: ${entry.score}/100`,
-    `Treasury size used: ${entry.treasurySizeBnb} BNB`,
+    `Verdict: ${entry.gate.toUpperCase()}, grade ${entry.grade} (${meaning}).`,
+    `Token ${entry.candidate.tokenSymbol}, treasury size ${entry.treasurySizeBnb} BNB.`,
     entry.roundTripLossBps === undefined ? "Round-trip exit cost: unknown" : `Round-trip exit cost: ${(entry.roundTripLossBps / 100).toFixed(1)}%`,
     entry.liquidityUsd === undefined ? "Liquidity: unknown" : `Liquidity: $${Math.round(entry.liquidityUsd)}`,
     `elizaOK momentum: ${entry.candidate.momentumScore}/100 (${entry.candidate.conviction})`,

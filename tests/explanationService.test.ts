@@ -33,4 +33,31 @@ describe("explanationService", () => {
     expect(text.length).toBeGreaterThan(0); // never throws; returns the templated fallback
     expect(text).toContain("FOO");
   });
+
+  it("disables Qwen3 thinking and sends a no-contradict prompt", async () => {
+    let body: { chat_template_kwargs?: { enable_thinking?: boolean }; messages?: { role: string; content: string }[] } | undefined;
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: async (_url: string, init: { body: string }) => {
+        body = JSON.parse(init.body);
+        return { ok: true, json: async () => ({ choices: [{ message: { content: "Low 0.5% exit cost and deep liquidity support the pass verdict." } }] }) } as Response;
+      }
+    });
+    const svc = new ElizaExplanationService({ url: "https://model.example/v1/chat/completions", model: "eliza-1", timeoutMs: 1000 });
+    const text = await svc.explain(entry());
+    expect(body?.chat_template_kwargs?.enable_thinking).toBe(false);
+    expect(body?.messages?.[0]?.content.toLowerCase()).toContain("do not");
+    expect(text).toContain("verdict");
+  });
+
+  it("strips <think> reasoning from the model output", async () => {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: "<think>let me reason about this</think>FOO is exitable at this size." } }] }) }) as Response
+    });
+    const svc = new ElizaExplanationService({ url: "https://model.example/v1/chat/completions", model: "eliza-1", timeoutMs: 1000 });
+    const text = await svc.explain(entry());
+    expect(text).toBe("FOO is exitable at this size.");
+    expect(text.toLowerCase()).not.toContain("think");
+  });
 });
