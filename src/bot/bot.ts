@@ -423,20 +423,35 @@ export function createBot(dependencies: BotDependencies): Bot {
       const chatId = requireChatId(ctx.chat?.id);
       const fromId = requireTelegramUserId(ctx.from?.id);
       const tokenAddress = String(ctx.match[1] ?? "");
-      const treasuryBnb = await groupTreasuryBnb(dependencies, chatId, fromId);
-      const list = await dependencies.watchlistService.getList(Number(chatId), treasuryBnb);
-      const entry = list.find((e) => e.candidate.tokenAddress.toLowerCase() === tokenAddress.toLowerCase());
-      if (entry === undefined) {
-        await ctx.answerCallbackQuery({ text: "That token rolled off the list — refreshing.", show_alert: false });
-        return;
-      }
-      const languages = normalizeLanguages((await dependencies.repository.getGroupLanguages(chatId)) ?? []);
-      const explanation = await dependencies.explanationService.explain(entry, languages);
+      // Respond to the webhook FAST: ack + placeholder, then do the slow work
+      // (pool enrichment + eliza-1 verdict — up to ~20s, more for multi-language)
+      // DETACHED, so we never blow grammy's ~10s webhook timeout.
       await ctx.answerCallbackQuery();
-      await ctx.editMessageText(formatWatchlistEntry(entry, explanation), {
-        parse_mode: "Markdown",
-        reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass")
-      });
+      await ctx.editMessageText("💛 Nancy's reading the pool — one sec…");
+      void (async () => {
+        try {
+          const treasuryBnb = await groupTreasuryBnb(dependencies, chatId, fromId);
+          const list = await dependencies.watchlistService.getList(Number(chatId), treasuryBnb);
+          const entry = list.find((e) => e.candidate.tokenAddress.toLowerCase() === tokenAddress.toLowerCase());
+          if (entry === undefined) {
+            await ctx.editMessageText("That token rolled off the list — run /nancy again.");
+            return;
+          }
+          const languages = normalizeLanguages((await dependencies.repository.getGroupLanguages(chatId)) ?? []);
+          const explanation = await dependencies.explanationService.explain(entry, languages);
+          await ctx.editMessageText(formatWatchlistEntry(entry, explanation), {
+            parse_mode: "Markdown",
+            reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass")
+          });
+        } catch (error) {
+          Logger.error("[TelegramBot] nancy_detail render failed", { err: error instanceof Error ? error : undefined });
+          try {
+            await ctx.editMessageText("Couldn't load that token right now — tap it again in a moment.");
+          } catch {
+            // editing the placeholder failed too; nothing more we can do
+          }
+        }
+      })();
     });
   });
 
