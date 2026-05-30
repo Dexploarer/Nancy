@@ -14,7 +14,7 @@ function entry(over: Partial<WatchlistEntry> = {}): WatchlistEntry {
 describe("watchlistView", () => {
   it("renders a header and a line per entry with grade + symbol", () => {
     const text = formatWatchlist([entry(), entry({ candidate: { ...entry().candidate, tokenSymbol: "BAR" }, grade: "F", gate: "block" })], 1);
-    expect(text).toContain("not financial advice");
+    expect(text.toLowerCase()).toContain("not financial advice");
     expect(text).toContain("GOOD");
     expect(text).toContain("BAR");
   });

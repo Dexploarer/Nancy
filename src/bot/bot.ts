@@ -397,6 +397,7 @@ export function createBot(dependencies: BotDependencies): Bot {
       const fromId = requireTelegramUserId(ctx.from?.id);
       const treasuryBnb = await groupTreasuryBnb(dependencies, chatId, fromId);
       const list = await dependencies.watchlistService.getList(Number(chatId), treasuryBnb);
+      await ctx.answerCallbackQuery();
       await ctx.editMessageText(formatWatchlist(list, treasuryBnb ?? dependencies.config.watchlistDefaultSizeBnb), {
         parse_mode: "Markdown",
         reply_markup: nancyListKeyboard(list)
@@ -417,6 +418,7 @@ export function createBot(dependencies: BotDependencies): Bot {
         return;
       }
       const explanation = await dependencies.explanationService.explain(entry);
+      await ctx.answerCallbackQuery();
       await ctx.editMessageText(formatWatchlistEntry(entry, explanation), {
         parse_mode: "Markdown",
         reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass")
