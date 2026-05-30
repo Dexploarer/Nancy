@@ -6,7 +6,7 @@ export interface ExplanationService {
 }
 
 const SYSTEM_PROMPT =
-  "You are writing one short explanation for a token already scored by a deterministic system. The verdict is FINAL — do NOT change, question, contradict it, or mention buying or selling. In at most 2 sentences, explain why the given numbers support the stated verdict.";
+  "You are Nancy, the Golden Girl of Binance — a sharp, warm, protective BSC trading-desk veteran. In 2-3 sentences give YOUR read on this token: interpret the order flow and pool structure, name the pattern you see (fresh-launch trap, dump in progress, thin/illiquid, healthy, etc.), and what you'd watch. Keep a little personality. Two hard rules: the VERDICT (grade and gate) is FINAL — it comes from your risk engine, so explain and interpret it, do not contradict or second-guess it; and do not tell anyone to buy or sell. Use only the data given. Write 2-3 plain sentences only — no headings, no bullet lists, and do not restate the grade or the word 'Verdict' (the user already sees it).";
 
 // Deterministic, no I/O. Also the fallback when the model is unavailable.
 export class TemplatedExplanationService implements ExplanationService {
@@ -87,22 +87,31 @@ function stripThink(text: string): string {
 }
 
 function prompt(entry: WatchlistEntry): string {
+  const c = entry.candidate;
+  const r = entry.riskReport;
   const meaning =
-    entry.gate === "pass"
-      ? "safe to enter and exit at this size"
-      : entry.gate === "warn"
-        ? "risky to exit at this size"
+    entry.gate === "pass" ? "safe to enter and exit at this size"
+      : entry.gate === "warn" ? "risky to exit at this size"
         : "unsafe to exit at this size";
-  return [
-    `Verdict: ${entry.gate.toUpperCase()}, grade ${entry.grade} (${meaning}).`,
-    `Token ${entry.candidate.tokenSymbol}, treasury size ${entry.treasurySizeBnb} BNB.`,
+  const lines = [
+    `Verdict (FINAL, from the risk engine): ${entry.gate.toUpperCase()}, grade ${entry.grade} (${meaning}).`,
+    `Token ${c.tokenSymbol}, treasury size ${entry.treasurySizeBnb} BNB.`,
     entry.roundTripLossBps === undefined
       ? "Round-trip exit cost: unknown"
       : entry.roundTripLossBps >= 9000
         ? "PancakeSwap-v2 exit: none at this size (liquidity is on a launchpad curve or Infinity, not the v2 pair)"
         : `Round-trip exit cost: ${(entry.roundTripLossBps / 100).toFixed(1)}%`,
     entry.liquidityUsd === undefined ? "Liquidity: unknown" : `Liquidity: $${Math.round(entry.liquidityUsd)}`,
-    `elizaOK momentum: ${entry.candidate.momentumScore}/100 (${entry.candidate.conviction})`,
-    `Flags: ${entry.reasons.length > 0 ? entry.reasons.join("; ") : "none"}`
-  ].join("\n");
+    c.poolAgeMinutes === undefined ? "" : `Pool age: ${c.poolAgeMinutes} min.`,
+    c.priceChangeH1 === undefined ? "" : `1h price change: ${c.priceChangeH1.toFixed(0)}%.`,
+    c.buysM5 === undefined && c.sellsM5 === undefined
+      ? ""
+      : `5m flow: ${c.buysM5 ?? "?"} buys / ${c.sellsM5 ?? "?"} sells, ${c.buyersM5 ?? "?"} buyers / ${c.sellersM5 ?? "?"} sellers.`,
+    r.lpLockedPercent === undefined ? "LP locked/burned: unknown" : `LP locked/burned: ${r.lpLockedPercent.toFixed(0)}%.`,
+    r.lpHolderTopPercent === undefined ? "" : `Top LP holder: ${r.lpHolderTopPercent.toFixed(0)}%.`,
+    `elizaOK momentum: ${c.momentumScore}/100 (${c.conviction}).`,
+    c.thesis.length > 0 ? `elizaOK thesis: ${c.thesis.slice(0, 2).join(" ")}` : "",
+    `Risk-engine flags: ${entry.reasons.length > 0 ? entry.reasons.join("; ") : "none"}`
+  ].filter((line) => line.length > 0);
+  return lines.join("\n");
 }

@@ -61,6 +61,24 @@ describe("explanationService", () => {
     expect(text.toLowerCase()).not.toContain("think");
   });
 
+  it("feeds order-flow and structure signals into the prompt", async () => {
+    let userMsg = "";
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: async (_url: string, init: { body: string }) => {
+        const b = JSON.parse(init.body) as { messages: { role: string; content: string }[] };
+        userMsg = b.messages[1]!.content;
+        return { ok: true, json: async () => ({ choices: [{ message: { content: "read" } }] }) } as Response;
+      }
+    });
+    const e = entry();
+    e.candidate.buysM5 = 121; e.candidate.sellsM5 = 84; e.candidate.buyersM5 = 38; e.candidate.sellersM5 = 27;
+    const svc = new ElizaExplanationService({ url: "https://m/v1/chat/completions", model: "eliza-1", timeoutMs: 1000 });
+    await svc.explain(e, ["en"]);
+    expect(userMsg).toContain("5m flow: 121 buys / 84 sells");
+    expect(userMsg.toLowerCase()).toContain("verdict");
+  });
+
   it("multi-language: generates one verdict per language and stacks them with flags", async () => {
     const systems: string[] = [];
     Object.defineProperty(globalThis, "fetch", {

@@ -16,6 +16,11 @@ const TokenSchema = z.object({
   volumeUsdH1: z.number().nullish(),
   priceChangeH1: z.number().nullish(),
   poolAgeMinutes: z.number().nullish(),
+  buysM5: z.number().nullish(),
+  sellsM5: z.number().nullish(),
+  buyersM5: z.number().nullish(),
+  sellersM5: z.number().nullish(),
+  volumeUsdM5: z.number().nullish(),
   thesis: z.array(z.string()).default([]),
   risks: z.array(z.string()).default([])
 });
@@ -68,6 +73,11 @@ function normalize(token: z.infer<typeof TokenSchema>): TrendingCandidate {
     ...(token.reserveUsd == null ? {} : { reserveUsd: token.reserveUsd }),
     ...(token.volumeUsdH1 == null ? {} : { volumeUsdH1: token.volumeUsdH1 }),
     ...(token.priceChangeH1 == null ? {} : { priceChangeH1: token.priceChangeH1 }),
-    ...(token.poolAgeMinutes == null ? {} : { poolAgeMinutes: token.poolAgeMinutes })
+    ...(token.poolAgeMinutes == null ? {} : { poolAgeMinutes: token.poolAgeMinutes }),
+    ...(token.buysM5 == null ? {} : { buysM5: token.buysM5 }),
+    ...(token.sellsM5 == null ? {} : { sellsM5: token.sellsM5 }),
+    ...(token.buyersM5 == null ? {} : { buyersM5: token.buyersM5 }),
+    ...(token.sellersM5 == null ? {} : { sellersM5: token.sellersM5 }),
+    ...(token.volumeUsdM5 == null ? {} : { volumeUsdM5: token.volumeUsdM5 })
   };
 }

@@ -269,6 +269,11 @@ export type TrendingCandidate = {
   volumeUsdH1?: number;
   priceChangeH1?: number;
   poolAgeMinutes?: number;
+  buysM5?: number;
+  sellsM5?: number;
+  buyersM5?: number;
+  sellersM5?: number;
+  volumeUsdM5?: number;
 };
 
 export type ExitSafetyGate = "pass" | "warn" | "block";
