@@ -1,16 +1,20 @@
 # Eliza-1 Inference Droplet Runbook
 
-## ⚠️ License Finding — Read Before Proceeding
+## Status — LIVE (authorized by the elizaOS team)
 
-The `elizaos/eliza-1` model on Hugging Face carries **`license: other`** (non-standard).
-The repository root contains only `.gitattributes`, `README.md`, and `upload-manifest.json` — **no LICENSE file exists in the model repo**, and the model card itself states no specific terms. Commercial use and self-hosted inference are therefore **NOT positively confirmed**.
+eliza-1's weights are the elizaOS team's own model, and the team (who operate this bot) have
+**authorized self-hosting**. (Outside readers: the public HF repo shows `license: other` with no
+LICENSE file — non-team deployers should confirm terms before relying on it.)
 
-The MIT license found in the `elizaOS/eliza` GitHub repository covers the agent *software framework*, not the eliza-1 model *weights*. Do not rely on that license to authorise weight-based inference.
+**Current deployment (2026-05-30):**
+- **Tier: eliza-1 2B** text GGUF (`bundles/2b/text/eliza-1-2b-128k.gguf`, ~1.27 GB). Chosen over 4B because on a CPU box the 2B renders a verdict in ~5 s, while 4B (~15–20 s) loses the explanation client's timeout race.
+- **Droplet `eliza-model`** (`s-4vcpu-8gb-intel`, region `sfo3`), Docker + `ghcr.io/ggml-org/llama.cpp:server`.
+- Exposed at **`https://model.bnbnancy.fun/v1/chat/completions`** — Caddy auto-TLS, API-key protected.
+- App Platform envs set: `ELIZA_MODEL_URL`, `ELIZA_MODEL_NAME=eliza-1`, `ELIZA_MODEL_API_KEY` (SECRET).
+- **Required request flag:** eliza-1 is a Qwen3 *reasoning* model — the client sends `chat_template_kwargs: { enable_thinking: false }`, otherwise it spends all tokens in `reasoning_content` and returns empty `content`. The client also strips any residual `<think>…</think>`.
 
-**Until the eliza-1 model license is clarified by elizaOS/Eliza Labs:**
-- Leave `ELIZA_MODEL_URL` **UNSET** in production.
-- The bot operates fully without it: the `/nancy` command uses the deterministic templated fallback in `explanationService` and all tests pass.
-- Monitor [https://huggingface.co/elizaos/eliza-1](https://huggingface.co/elizaos/eliza-1) and the [elizaOS GitHub](https://github.com/elizaOS/eliza) for a formal license update before enabling inference.
+If the model endpoint is unreachable, `/nancy` automatically falls back to the deterministic
+templated explanation. The score and pass/warn/block gate are deterministic regardless of the model.
 
 ---
 
@@ -18,8 +22,9 @@ The MIT license found in the `elizaOS/eliza` GitHub repository covers the agent 
 
 This runbook describes how to optionally provision a CPU droplet on DigitalOcean and run a
 [llama.cpp](https://github.com/ggml-org/llama.cpp) OpenAI-compatible inference server for the
-eliza-1 4B model. This server is consumed by the `/nancy` command's `explanationService` when
-`ELIZA_MODEL_URL` is set on the App Platform app.
+eliza-1 text model (the live deployment uses the **2B** tier — see Status above). This server is
+consumed by the `/nancy` command's `explanationService` when `ELIZA_MODEL_URL` is set on the App
+Platform app.
 
 The Nancy bot itself runs on a **DigitalOcean App Platform `basic-xxs` instance**. The model
 runs on a **separate CPU droplet**; the App Platform app calls it over HTTPS.
