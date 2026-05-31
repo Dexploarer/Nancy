@@ -33,3 +33,19 @@ jobs:
       - run: docker build -t registry.digitalocean.com/nancy-bsc-bot/nancy:latest .
       - run: docker push registry.digitalocean.com/nancy-bsc-bot/nancy:latest
       - run: doctl apps create-deployment 7d649227-9d40-4b4a-8ae3-62d0a14eea53 --wait
+      # Keep the DOCR (500MB free tier) from filling with dangling images. Each push
+      # demotes the previous ':latest' to an untagged manifest; left alone they pile
+      # up (~105MB each) and eventually fail the push with "quota exceeded". After a
+      # successful deploy, delete every untagged manifest and start GC to reclaim the
+      # blobs. GC is async (it waits ~20min for this run's registry write token to
+      # expire), so this never blocks the deploy. 'latest' is tagged, so it's safe.
+      - name: Prune untagged images from registry
+        if: success()
+        run: |
+          doctl registry repository list-manifests nancy -o json \
+            | jq -r '.[] | select((.tags // []) | length == 0) | .digest' \
+            | while read -r digest; do
+                echo "Deleting untagged manifest ${digest}"
+                doctl registry repository delete-manifest nancy "${digest}" --force
+              done
+          doctl registry garbage-collection start --force || true
