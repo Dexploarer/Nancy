@@ -151,10 +151,16 @@ export function nancyLangKeyboard(selected: string[]): InlineKeyboard {
   return keyboard;
 }
 
-export function nancyDetailKeyboard(tokenAddress: string, gatePassed: boolean, voiceAvailable = false): InlineKeyboard {
+export function nancyDetailKeyboard(
+  tokenAddress: string,
+  gatePassed: boolean,
+  voiceAvailable = false,
+  videoAvailable = false
+): InlineKeyboard {
   const keyboard = new InlineKeyboard().text("⬅️ Back to list", "nancy_list");
   if (gatePassed) keyboard.text("Trade this", `nancy_buy:${tokenAddress}`);
   if (voiceAvailable) keyboard.text("🔊 Hear it", `nancy_voice:${tokenAddress}`);
+  if (videoAvailable) keyboard.text("🎬 Watch it", `nancy_video:${tokenAddress}`);
   return keyboard;
 }
 

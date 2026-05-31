@@ -5,6 +5,12 @@ FROM oven/bun:1.3.13
 
 WORKDIR /app
 
+# ffmpeg renders Nancy's voice notes into avatar+waveform MP4s (voiceVideoService).
+# Not in the base image; install before deps so this layer caches across code changes.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
+
 # Install deps first for layer caching. --frozen-lockfile fails if bun.lock drifts.
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import type { AppConfig } from "./config.js";
 import { getBscContractAddresses } from "./chain/addresses.js";
 import { FlapService } from "./chain/flapService.js";
@@ -10,6 +11,7 @@ import { ElizaOkFeedService } from "./services/elizaOkFeedService.js";
 import { WatchlistService } from "./services/watchlistService.js";
 import { ElizaExplanationService, TemplatedExplanationService, type ExplanationService } from "./services/explanationService.js";
 import { VoiceService } from "./services/voiceService.js";
+import { VoiceVideoService } from "./services/voiceVideoService.js";
 import { FlapLaunchService } from "./services/flapLaunchService.js";
 import { SafeSubmissionService } from "./services/safeSubmissionService.js";
 import { WalletLinkService } from "./services/walletLinkService.js";
@@ -109,6 +111,11 @@ export function buildApp(config: AppConfig): App {
           url: config.kokoroTtsUrl,
           ...(config.kokoroTtsApiKey === undefined ? {} : { apiKey: config.kokoroTtsApiKey })
         });
+  // Video reuses the voice synth, so it's only available when voice is.
+  const voiceVideoService =
+    voiceService === undefined
+      ? undefined
+      : new VoiceVideoService({ avatarPath: fileURLToPath(new URL("../assets/nancy.png", import.meta.url)) });
   const flapLaunchService = new FlapLaunchService(repository, flapService);
   const flapMetadataService = new FlapMetadataService(config.pinataJwt);
   const safeSubmissionService = new SafeSubmissionService(
@@ -133,6 +140,7 @@ export function buildApp(config: AppConfig): App {
     watchlistService,
     explanationService,
     ...(voiceService === undefined ? {} : { voiceService }),
+    ...(voiceVideoService === undefined ? {} : { voiceVideoService }),
     config
   });
   const depositWatcher = new DepositWatcher(

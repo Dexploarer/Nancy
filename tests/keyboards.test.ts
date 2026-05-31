@@ -6,6 +6,7 @@ import {
   executePageKeyboard,
   flapLaunchKeyboard,
   linkPageKeyboard,
+  nancyDetailKeyboard,
   poolAppKeyboard,
   safeGroupKeyboard,
   safeSubmissionKeyboard,
@@ -111,5 +112,10 @@ describe("result action keyboards (no ID typing)", () => {
     const d = data(safeSubmissionKeyboard("safe_1", "https://x.test", false));
     expect(d).toContain("safe_status:safe_1");
     expect(d).toContain("safe_execute:safe_1");
+  });
+
+  it("nancy detail offers Watch it only when video is available", () => {
+    expect(data(nancyDetailKeyboard("0xabc", false, true, true))).toContain("nancy_video:0xabc");
+    expect(data(nancyDetailKeyboard("0xabc", false, true, false))).not.toContain("nancy_video:0xabc");
   });
 });

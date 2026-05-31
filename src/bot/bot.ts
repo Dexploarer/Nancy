@@ -28,8 +28,10 @@ import { DepositVerificationService } from "../services/depositVerificationServi
 import type { WatchlistService } from "../services/watchlistService.js";
 import type { ExplanationService } from "../services/explanationService.js";
 import { VoiceService, voiceSupported } from "../services/voiceService.js";
+import type { VoiceVideoService } from "../services/voiceVideoService.js";
 import { flapLaunchKeyboard, helpText, linkPageKeyboard, mainMenuKeyboard, nancyDetailKeyboard, nancyLangKeyboard, nancyListKeyboard, safeGroupKeyboard, safeSubmissionKeyboard, tradeProposalKeyboard } from "./keyboards.js";
 import { normalizeLanguages } from "../domain/languages.js";
+import type { WatchlistEntry } from "../domain/types.js";
 import { formatWatchlist, formatWatchlistEntry } from "./watchlistView.js";
 import { registerSafeCallbacks } from "./safeCallbacks.js";
 import { registerPoolCommands } from "./poolCommands.js";
@@ -61,6 +63,7 @@ export type BotDependencies = {
   watchlistService: WatchlistService;
   explanationService: ExplanationService;
   voiceService?: VoiceService;
+  voiceVideoService?: VoiceVideoService;
   config: AppConfig;
 };
 
@@ -442,9 +445,10 @@ export function createBot(dependencies: BotDependencies): Bot {
           const languages = normalizeLanguages((await dependencies.repository.getGroupLanguages(chatId)) ?? []);
           const explanation = await dependencies.explanationService.explain(entry, languages);
           const voiceAvailable = dependencies.voiceService !== undefined; // always offer voice; unsupported langs fall back to an English voice
+          const videoAvailable = voiceAvailable && dependencies.voiceVideoService !== undefined; // video reuses the voice synth
           await ctx.editMessageText(formatWatchlistEntry(entry, explanation), {
             parse_mode: "Markdown",
-            reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass", voiceAvailable)
+            reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass", voiceAvailable, videoAvailable)
           });
         } catch (error) {
           Logger.error("[TelegramBot] nancy_detail render failed", { err: error instanceof Error ? error : undefined });
@@ -492,35 +496,69 @@ export function createBot(dependencies: BotDependencies): Bot {
         await ctx.answerCallbackQuery({ text: "Voice isn't enabled.", show_alert: true });
         return;
       }
-      const languages = normalizeLanguages((await dependencies.repository.getGroupLanguages(chatId)) ?? []);
-      const primary = languages[0] ?? "en";
-      // Kokoro can't speak every language; for an unsupported one, voice an English
-      // take so the button still works (the written take stays in the group's language).
-      const voiceLang = voiceSupported(primary) ? primary : "en";
       await ctx.answerCallbackQuery({ text: "🔊 Recording Nancy's take…" });
       void (async () => {
         try {
-          const treasuryBnb = await groupTreasuryBnb(dependencies, chatId, fromId);
-          const list = await dependencies.watchlistService.getList(Number(chatId), treasuryBnb);
-          const entry = list.find((e) => e.candidate.tokenAddress.toLowerCase() === tokenAddress.toLowerCase());
-          if (entry === undefined) return;
-          const take = await dependencies.explanationService.explain(entry, [voiceLang]);
-          const spoken = take.replace(/[*_`\[\]#]/g, "");
-          const audio = await dependencies.voiceService!.synthesize(spoken, voiceLang);
-          if (audio === null) {
-            await ctx.reply("Couldn't record that one — try again in a moment.");
+          const take = await nancySpokenTake(dependencies, chatId, fromId, tokenAddress);
+          if (!take.ok) {
+            if (take.reason === "synth") await ctx.reply("Couldn't record that one — try again in a moment.");
             return;
           }
-          await ctx.replyWithVoice(new InputFile(audio, "nancy.ogg"), {
+          const { entry, voiceLang, primary } = take;
+          const symbol = entry.candidate.tokenSymbol;
+          await ctx.replyWithVoice(new InputFile(take.audio, "nancy.ogg"), {
             caption:
               voiceLang === primary
-                ? `🔊 Nancy on ${entry.candidate.tokenSymbol}`
-                : `🔊 Nancy on ${entry.candidate.tokenSymbol} (English voice — no ${primary} voice yet)`,
+                ? `🔊 Nancy on ${symbol}`
+                : `🔊 Nancy on ${symbol} (English voice — no ${primary} voice yet)`,
             // Re-open the options under the voice note so the user can act once she's done speaking.
-            reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass", true)
+            reply_markup: nancyDetailKeyboard(
+              entry.candidate.tokenAddress,
+              entry.gate === "pass",
+              true,
+              dependencies.voiceVideoService !== undefined
+            )
           });
         } catch (error) {
           Logger.error("[TelegramBot] nancy_voice failed", { err: error instanceof Error ? error : undefined });
+        }
+      })();
+    });
+  });
+
+  bot.callbackQuery(/^nancy_video:(.+)$/, async (ctx) => {
+    await handleCallback(ctx, async () => {
+      const chatId = requireChatId(ctx.chat?.id);
+      const fromId = requireTelegramUserId(ctx.from?.id);
+      const tokenAddress = String(ctx.match[1] ?? "");
+      if (dependencies.voiceService === undefined || dependencies.voiceVideoService === undefined) {
+        await ctx.answerCallbackQuery({ text: "Video isn't enabled.", show_alert: true });
+        return;
+      }
+      await ctx.answerCallbackQuery({ text: "🎬 Filming Nancy's take…" });
+      void (async () => {
+        try {
+          const take = await nancySpokenTake(dependencies, chatId, fromId, tokenAddress);
+          if (!take.ok) {
+            if (take.reason === "synth") await ctx.reply("Couldn't film that one — try again in a moment.");
+            return;
+          }
+          const video = await dependencies.voiceVideoService!.render(take.audio);
+          if (video === null) {
+            await ctx.reply("Couldn't film that one — try again in a moment.");
+            return;
+          }
+          const { entry, voiceLang, primary } = take;
+          const symbol = entry.candidate.tokenSymbol;
+          await ctx.replyWithVideo(new InputFile(video, "nancy.mp4"), {
+            caption:
+              voiceLang === primary
+                ? `🎬 Nancy on ${symbol}`
+                : `🎬 Nancy on ${symbol} (English voice — no ${primary} voice yet)`,
+            reply_markup: nancyDetailKeyboard(entry.candidate.tokenAddress, entry.gate === "pass", true, true)
+          });
+        } catch (error) {
+          Logger.error("[TelegramBot] nancy_video failed", { err: error instanceof Error ? error : undefined });
         }
       })();
     });
@@ -576,6 +614,36 @@ export function createBot(dependencies: BotDependencies): Bot {
   });
 
   return bot;
+}
+
+type SpokenTake =
+  | { ok: true; entry: WatchlistEntry; audio: Buffer; voiceLang: string; primary: string }
+  | { ok: false; reason: "gone" | "synth" };
+
+// Shared by the "🔊 Hear it" and "🎬 Watch it" buttons: resolve the watchlist
+// entry, render Nancy's take in the group's language, and synthesize it to audio.
+// Kokoro can't speak every language, so an unsupported primary falls back to an
+// English voice (the written take stays in the group's language). Returns "gone"
+// if the token rolled off the list (callers stay silent) or "synth" if voice
+// failed (callers tell the user to retry).
+async function nancySpokenTake(
+  deps: BotDependencies,
+  chatId: string,
+  fromId: string,
+  tokenAddress: string
+): Promise<SpokenTake> {
+  const languages = normalizeLanguages((await deps.repository.getGroupLanguages(chatId)) ?? []);
+  const primary = languages[0] ?? "en";
+  const voiceLang = voiceSupported(primary) ? primary : "en";
+  const treasuryBnb = await groupTreasuryBnb(deps, chatId, fromId);
+  const list = await deps.watchlistService.getList(Number(chatId), treasuryBnb);
+  const entry = list.find((e) => e.candidate.tokenAddress.toLowerCase() === tokenAddress.toLowerCase());
+  if (entry === undefined) return { ok: false, reason: "gone" };
+  const take = await deps.explanationService.explain(entry, [voiceLang]);
+  const spoken = take.replace(/[*_`\[\]#]/g, "");
+  const audio = deps.voiceService === undefined ? null : await deps.voiceService.synthesize(spoken, voiceLang);
+  if (audio === null) return { ok: false, reason: "synth" };
+  return { ok: true, entry, audio, voiceLang, primary };
 }
 
 async function groupTreasuryBnb(deps: BotDependencies, chatId: string, fromId: string): Promise<number | undefined> {
